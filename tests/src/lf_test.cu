@@ -11,7 +11,7 @@
 
 #define COUNT_PROBES 0
 
-#define LOAD_CHEAP 0
+#define LOAD_CHEAP 1
 
 #include <gallatin/allocators/global_allocator.cuh>
 
@@ -21,6 +21,8 @@
 #include <gallatin/allocators/timer.cuh>
 
 #include <bght/p2bht.hpp>
+#include <bght/bcht.hpp>
+#include <bght/iht.hpp>
 
 #include <hashing_project/cache.cuh>
 
@@ -36,17 +38,18 @@
 namespace fs = std::filesystem;
 
 
-#include <hashing_project/table_wrappers/p2_wrapper.cuh>
-#include <hashing_project/table_wrappers/dummy_ht.cuh>
-#include <hashing_project/table_wrappers/iht_wrapper.cuh>
+// #include <hashing_project/table_wrappers/p2_wrapper.cuh>
+// #include <hashing_project/table_wrappers/dummy_ht.cuh>
+// #include <hashing_project/table_wrappers/iht_wrapper.cuh>
 #include <hashing_project/table_wrappers/warpcore_wrapper.cuh>
 #include <hashing_project/tables/p2_hashing_external.cuh>
 #include <hashing_project/tables/p2_hashing_internal.cuh>
-#include <hashing_project/tables/iht_double_hashing.cuh>
 #include <hashing_project/tables/double_hashing.cuh>
 #include <hashing_project/tables/iht_p2.cuh>
 #include <hashing_project/tables/chaining.cuh>
 #include <hashing_project/tables/p2_hashing_metadata.cuh>
+#include <hashing_project/tables/iht_p2_metadata.cuh>
+#include <hashing_project/tables/iht_p2_metadata_full.cuh>
 #include <hashing_project/tables/cuckoo.cuh>
 
 #include <iostream>
@@ -73,6 +76,10 @@ using namespace gallatin::allocators;
 
 
 #define DATA_TYPE uint64_t
+
+
+#define LARGE_MD_LOAD 1
+#define LARGE_BUCKET_MODS 0
 
 
 template <typename T>
@@ -163,22 +170,62 @@ __global__ void insert_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64
       #endif
       
    } else {
+      
 
       DATA_TYPE my_val;
 
-      // if (!table->find_with_reference(my_tile, my_key, my_val)){
+      if (!table->find_with_reference(my_tile, my_key, my_val)){
 
+         table->upsert_generic(my_tile, my_key, my_key);
 
-
-
-      //    table->find_with_reference(my_tile, my_key, my_val);
-      //    //printf("Failed query\n");
-      // }
+         table->find_with_reference(my_tile, my_key, my_val);
+         //printf("Failed query\n");
+      }
 
    }
 
 
 }
+
+template <typename ht_type, uint tile_size>
+__global__ void remove_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64_t n_keys, uint64_t * misses){
+
+
+   auto thread_block = cg::this_thread_block();
+
+   cg::thread_block_tile<tile_size> my_tile = cg::tiled_partition<tile_size>(thread_block);
+
+
+   uint64_t tid = gallatin::utils::get_tile_tid(my_tile);
+
+   if (tid >= n_keys) return;
+
+   // if (__popc(my_tile.ballot(1)) != 32){
+   //    printf("Bad tile size\n");
+   // }
+
+
+   uint64_t my_key = insert_buffer[tid];
+
+   if (!table->remove(my_tile, my_key)){
+
+      // table->upsert_generic(my_tile, my_key, my_key);
+
+      // table->remove(my_tile, my_key);
+
+
+      #if MEASURE_FAILS
+      if (my_tile.thread_rank() == 0){
+
+         atomicAdd((unsigned long long int *)&misses[2], 1ULL);
+         //printf("Init upsert failed for %lu\n", my_key);
+      }
+      #endif
+      
+   } 
+
+}
+
 
 
 template <typename ht_type, uint tile_size>
@@ -208,6 +255,8 @@ __global__ void query_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64_
 
       //table->upsert_generic(my_tile, my_key, my_key);
 
+      //table->find_with_reference(my_tile, my_key, my_val);
+
 
       #if MEASURE_FAILS
       if (my_tile.thread_rank() == 0){
@@ -222,7 +271,7 @@ __global__ void query_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64_
       if (my_val != my_key){
 
 
-         table->find_with_reference(my_tile, my_key, my_val);
+        //table->find_with_reference(my_tile, my_key, my_val);
 
          atomicAdd((unsigned long long int *)&misses[1], 1ULL);
       }
@@ -255,7 +304,11 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
 
    #if COUNT_PROBES
 
-   std::string filename = "results/lf_probe/";
+   #if LOAD_CHEAP
+      std::string filename = "results/lf_probe_bght/";
+   #else
+      std::string filename = "results/lf_probe/";
+   #endif
 
    filename = filename + ht_type::get_name() + ".txt";
 
@@ -265,12 +318,16 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
 
    std::ofstream myfile;
    myfile.open (filename.c_str());
-   myfile << "lf,insert,query\n";
+   myfile << "lf,insert,query,remove\n";
 
 
    #else
 
-   std::string filename = "results/lf/";
+   #if LOAD_CHEAP
+      std::string filename = "results/lf_bght/";
+   #else
+      std::string filename = "results/lf/";
+   #endif
 
    filename = filename + ht_type::get_name() + ".txt";
 
@@ -280,7 +337,7 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
 
    std::ofstream myfile;
    myfile.open (filename.c_str());
-   myfile << "lf,insert,query\n";
+   myfile << "lf,insert,query,remove\n";
 
    #endif
 
@@ -318,6 +375,7 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
 
       cudaDeviceSynchronize();
 
+
       gallatin::utils::timer query_timer;
 
       query_kernel<ht_type, tile_size><<<(items_to_insert*tile_size-1)/256+1,256>>>(table, device_data, items_to_insert, misses);
@@ -325,6 +383,19 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
       query_timer.sync_end();
 
       uint64_t query_probes = helpers::get_num_probes();
+
+      cudaDeviceSynchronize();
+
+
+      gallatin::utils::timer remove_timer;
+      
+      remove_kernel<ht_type, tile_size><<<(items_to_insert*tile_size-1)/256+1,256>>>(table, device_data, items_to_insert, misses);
+
+      remove_timer.sync_end();
+
+      uint64_t remove_probes = helpers::get_num_probes();
+
+      cudaDeviceSynchronize();
 
 
       //free tables and generate results
@@ -334,22 +405,25 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
 
       insert_timer.print_throughput("Inserted", items_to_insert);
       query_timer.print_throughput("Queried", items_to_insert);
+      remove_timer.print_throughput("Removed", items_to_insert);
 
       #if COUNT_PROBES
 
-      printf("Probes %llu %llu\n", insert_probes, query_probes);
+      printf("Probes %llu %llu %llu\n", insert_probes, query_probes, remove_probes);
     
-      myfile << lf << "," << std::setprecision(12) << 1.0*insert_probes/items_to_insert << "," << 1.0*query_probes/items_to_insert << "\n";
+      myfile << lf << "," << std::setprecision(12) << 1.0*insert_probes/items_to_insert << "," << 1.0*query_probes/items_to_insert << "," << 1.0*remove_probes/items_to_insert << "\n";
 
       #else
 
-      myfile << lf << "," << std::setprecision(12) << 1.0*items_to_insert/(insert_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(query_timer.elapsed()*1000000) << "\n";
+      myfile << lf << "," << std::setprecision(12) << 1.0*items_to_insert/(insert_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(query_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(remove_timer.elapsed()*1000000) << "\n";
 
       #endif
 
-      printf("Misses: %lu %lu\n", misses[0], misses[1]);
+      printf("Misses: %lu %lu %lu\n", misses[0], misses[1], misses[2]);
 
       misses[0] = 0;
+      misses[1] = 0;
+      misses[2] = 0;
       cudaDeviceSynchronize();
 
       //cuckoo is not leaking memory oon device.
@@ -368,7 +442,243 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
 }
 
 
+
+template <typename data>
+__global__ void count_duplicates(data * data_array, uint64_t n_pairs, uint64_t * misses){
+
+   uint64_t tid = gallatin::utils::get_tid();
+
+   uint64_t first = tid/n_pairs;
+   uint64_t second = tid % n_pairs;
+
+   if (first >= n_pairs || second >= n_pairs) return;
+
+
+   if (data_array[first] == data_array[second]){
+      atomicAdd((unsigned long long int *)&misses, 1ULL);
+   }
+
+}
+
+template <typename data>
+__host__ void print_duplicates(data * data_array, uint64_t n_pairs){
+
+
+   uint64_t * misses;
+
+   cudaMallocManaged((void **)&misses, sizeof(uint64_t));
+
+   misses[0] = 0;
+
+
+   data * device_data = gallatin::utils::get_device_version<data>(n_pairs);
+
+   cudaMemcpy(device_data, data_array, sizeof(data)*n_pairs, cudaMemcpyHostToDevice);
+
+   cudaDeviceSynchronize();
+
+   count_duplicates<<<(n_pairs*n_pairs-1)/512+1,512>>>(device_data, n_pairs, misses);
+
+   cudaDeviceSynchronize();
+
+   printf("System has %llu duplicates\n", misses[0]);
+
+   cudaFree(misses);
+   cudaFree(device_data);
+
+}
+
+
+template<typename data, typename pair_type>
+__global__ void setup_bght_pair(data * data_array, pair_type * pair_array, uint64_t n_pairs){
+
+
+   uint64_t tid = gallatin::utils::get_tid();
+
+   if (tid >= n_pairs) return;
+
+   pair_array[tid].first = data_array[tid];
+   pair_array[tid].second = data_array[tid];
+
+} 
+
+
+template <typename ht_type, typename data, uint tile_size>
+__global__ void bght_query(ht_type table, data * query_data, uint64_t n_keys){
+
+   auto thread_block = cg::this_thread_block();
+
+   cg::thread_block_tile<tile_size> my_tile = cg::tiled_partition<tile_size>(thread_block);
+
+
+   uint64_t tid = gallatin::utils::get_tile_tid(my_tile);
+
+   if (tid >= n_keys) return;
+
+   data key = query_data[tid];
+
+   auto result = table.find(key, my_tile);
+
+   //doesn't trigger?
+   // if (result != key){
+
+   //    //if (my_tile)
+   //    printf("Missed\n");
+   // }
+
+
+
+}
+
+template <template<typename, typename> typename hash_table_type, uint tile_size>
+__host__ void lf_test_BGHT(uint64_t n_indices, DATA_TYPE * access_pattern, std::string ht_name){
+
+
+
+   using ht_type = hash_table_type<DATA_TYPE, DATA_TYPE>;
+
+   using pair_type = bght::padded_pair<DATA_TYPE, DATA_TYPE>;
+
+
+   #if COUNT_PROBES
+
+   std::string filename = "results/lf_probe_bght/";
+
+   filename = filename + ht_name + ".txt";
+
+
+   printf("Writing to %s\n", filename.c_str());
+   //write to output
+
+   std::ofstream myfile;
+   myfile.open (filename.c_str());
+   myfile << "lf,insert,query\n";
+
+
+   #else
+
+   std::string filename = "results/lf_bght/";
+
+   filename = filename + ht_name + ".txt";
+
+
+   printf("Writing to %s\n", filename.c_str());
+   //write to output
+
+   std::ofstream myfile;
+   myfile.open (filename.c_str());
+   myfile << "lf,insert,query\n";
+
+   #endif
+
+
+   for (int i = 1; i < 19; i++){
+
+      
+
+      double lf = .05*i;
+
+      ht_type table(n_indices, 0U, ~0U);
+
+      uint64_t items_to_insert = lf*n_indices;
+
+      DATA_TYPE * device_data = gallatin::utils::get_device_version<DATA_TYPE>(items_to_insert);
+
+      DATA_TYPE * query_data = gallatin::utils::get_device_version<DATA_TYPE>(items_to_insert);
+
+      pair_type * device_pairs = gallatin::utils::get_device_version<pair_type>(items_to_insert);
+
+      //set original buffer
+      cudaMemcpy(device_data, access_pattern, sizeof(DATA_TYPE)*items_to_insert, cudaMemcpyHostToDevice);
+
+      cudaDeviceSynchronize();
+
+      setup_bght_pair<DATA_TYPE,pair_type><<<(items_to_insert-1)/256+1,256>>>(device_data, device_pairs, items_to_insert);
+
+
+      #if COUNT_PROBES
+
+      cudaDeviceSynchronize();
+
+      bght::get_num_probes();
+
+      #endif
+
+      cudaDeviceSynchronize();
+
+
+
+
+      gallatin::utils::timer insert_timer;
+
+      table.insert(device_pairs, device_pairs+items_to_insert, 0);
+
+      insert_timer.sync_end();
+
+      #if COUNT_PROBES
+      auto insert_probes = bght::get_num_probes();
+      #endif
+
+
+      //query
+      gallatin::utils::timer query_timer;
+
+      //bght_query<ht_type, DATA_TYPE, tile_size><<<(items_to_insert*tile_size-1)/256+1,256>>>(table, device_data, items_to_insert);
+
+      table.find(device_data, device_data+items_to_insert, query_data, 0);
+
+
+      query_timer.sync_end();
+
+
+      #if COUNT_PROBES
+      auto query_probes = bght::get_num_probes();
+      #endif
+
+      DATA_TYPE * output = gallatin::utils::get_device_version<DATA_TYPE>(items_to_insert);
+
+      // gallatin::utils::timer self_query_timer;
+
+      // table.find(device_data, device_data+items_to_insert, output);
+
+
+      // self_query_timer.sync_end();
+
+      #if COUNT_PROBES
+
+      myfile << lf << "," << std::setprecision(12) << 1.0*insert_probes/items_to_insert << "," << 1.0*query_probes/items_to_insert  << "\n";
+
+      #else
+
+      myfile << lf << "," << std::setprecision(12) << 1.0*items_to_insert/(insert_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(query_timer.elapsed()*1000000) << "\n";
+
+      #endif
+
+      insert_timer.print_throughput("Inserted", items_to_insert);
+      query_timer.print_throughput("Queried", items_to_insert);
+      //self_query_timer.print_throughput("Self Queried", items_to_insert);
+
+      cudaFree(device_pairs);
+      cudaFree(device_data);
+      cudaFree(query_data);
+      cudaFree(output);
+
+
+   }
+
+   myfile.close();
+
+
+}
+
+
+
 int main(int argc, char** argv) {
+
+
+
+   //potential option to improve perf?
+   //cudaDeviceSetLimit (cudaLimitMaxL2FetchGranularity, 32);
 
    uint64_t table_capacity;
 
@@ -410,47 +720,87 @@ int main(int argc, char** argv) {
 
    #endif
 
+   if(fs::create_directory("results/lf_bght")){
+    std::cout << "Created a directory\n";
+   } else {
+    std::cerr << "Failed to create a directory\n";
+   }
+
+
+   #if COUNT_PROBES
+
+   if(fs::create_directory("results/lf_probe_bght")){
+    std::cout << "Created a directory\n";
+   } else {
+    std::cerr << "Failed to create a directory\n";
+   }
+
+   #endif
+
    auto access_pattern = generate_data<DATA_TYPE>(table_capacity);
+
+
+   //print_duplicates<DATA_TYPE>(access_pattern, table_capacity);
    
+
+   // lf_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, access_pattern);
 
    // lf_test<hashing_project::tables::p2_int_generic, 8, 32>(table_capacity, access_pattern);
 
    // lf_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, access_pattern);
 
-   // lf_test<hashing_project::tables::p2_ext_generic, 1, 32>(table_capacity, access_pattern);
-   // lf_test<hashing_project::tables::p2_ext_generic, 2, 32>(table_capacity, access_pattern);
-   // lf_test<hashing_project::tables::p2_ext_generic, 4, 32>(table_capacity, access_pattern);
-   // lf_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, access_pattern);
-   // lf_test<hashing_project::tables::p2_ext_generic, 16, 32>(table_capacity, access_pattern);
-   // lf_test<hashing_project::tables::p2_ext_generic, 32, 32>(table_capacity, access_pattern);
-
    // lf_test<hashing_project::tables::double_generic, 4, 8>(table_capacity, access_pattern);
 
-   lf_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, access_pattern);
 
    
-   init_global_allocator(15ULL*1024*1024*1024, 111);
 
-   //lf_test<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, access_pattern);
+   
+   // init_global_allocator(15ULL*1024*1024*1024, 111);
 
-   //lf_test<hashing_project::tables::cuckoo_generic, 32, 32>(table_capacity, access_pattern);
+   // lf_test<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, access_pattern);
 
-   free_global_allocator();
+   
+
+   // free_global_allocator();
 
    cudaDeviceSynchronize();
+
+   lf_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, access_pattern);
+   
+   lf_test<hashing_project::tables::cuckoo_generic, 8, 8>(table_capacity, access_pattern);
    
 
    //lf_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
    
-  
+   //lf_test<hashing_project::tables::iht_p2_metadata_generic, 4, 32>(table_capacity, access_pattern);
 
-   // lf_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, access_pattern);
+   //lf_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, access_pattern);
+
+   //lf_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, access_pattern);
+
+
+
+   // printf("Starting BGHT tests\n");
+
+   // lf_test_BGHT<bght::bcht8, 8>(table_capacity, access_pattern, "bcht_8");
+
+   // lf_test_BGHT<bght::bcht16, 16>(table_capacity, access_pattern, "bcht_16");
+   
+   // lf_test_BGHT<bght::bcht32, 32>(table_capacity, access_pattern, "bcht_32");
+
+
+   // lf_test_BGHT<bght::p2bht8, 8>(table_capacity, access_pattern, "p2bht_8");
+   
+   // lf_test_BGHT<bght::p2bht16, 16>(table_capacity, access_pattern, "p2bht_16");
+   
+   // lf_test_BGHT<bght::p2bht32, 32>(table_capacity, access_pattern, "p2bht_32");
+
 
 
    cudaFreeHost(access_pattern);
 
 
-
+   
 
    cudaDeviceReset();
    return 0;

@@ -26,7 +26,7 @@ namespace cg = cooperative_groups;
 // a pointer list managing a set section of device memory
 
 #define FRONT_TOTAL_RATIO .9
-#define BACK_PROBES 20
+//#define BACK_PROBES 20
 
 
 //cache protocol
@@ -312,7 +312,7 @@ namespace tables {
          }
 
 
-         return -1;
+         return false;
 
       }
 
@@ -670,8 +670,8 @@ namespace tables {
          uint64_t high = bucket/64;
          uint64_t low = bucket % 64;
 
-         //if old is 0, SET_BITMASK & 0 is 0 - loop exit.
-         while (atomicOr((unsigned long long int *)&primary_locks[high], (unsigned long long int) SET_BITMASK(low)) & SET_BITMASK(low)){
+         //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
+         while (atomicOr((unsigned long long int *)&primary_locks[high], (unsigned long long int) SET_BIT_MASK(low)) & SET_BIT_MASK(low)){
            //printf("TID %llu Stalling for Bucket %llu/%llu\n", threadIdx.x+blockIdx.x*blockDim.x, bucket, num_buckets_);
          }
 
@@ -694,8 +694,8 @@ namespace tables {
          uint64_t high = bucket/64;
          uint64_t low = bucket % 64;
 
-         //if old is 0, SET_BITMASK & 0 is 0 - loop exit.
-         while (atomicOr((unsigned long long int *)&alt_locks[high], (unsigned long long int) SET_BITMASK(low)) & SET_BITMASK(low)){
+         //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
+         while (atomicOr((unsigned long long int *)&alt_locks[high], (unsigned long long int) SET_BIT_MASK(low)) & SET_BIT_MASK(low)){
            //printf("TID %llu Stalling for Bucket %llu/%llu\n", threadIdx.x+blockIdx.x*blockDim.x, bucket, num_buckets_);
          }
 
@@ -718,8 +718,8 @@ namespace tables {
          uint64_t high = bucket/64;
          uint64_t low = bucket % 64;
 
-         //if old is 0, SET_BITMASK & 0 is 0 - loop exit.
-         atomicAnd((unsigned long long int *)&primary_locks[high], (unsigned long long int) ~SET_BITMASK(low));
+         //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
+         atomicAnd((unsigned long long int *)&primary_locks[high], (unsigned long long int) ~SET_BIT_MASK(low));
 
       }
 
@@ -739,8 +739,8 @@ namespace tables {
          uint64_t high = bucket/64;
          uint64_t low = bucket % 64;
 
-         //if old is 0, SET_BITMASK & 0 is 0 - loop exit.
-         atomicAnd((unsigned long long int *)&alt_locks[high], (unsigned long long int) ~SET_BITMASK(low));
+         //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
+         atomicAnd((unsigned long long int *)&alt_locks[high], (unsigned long long int) ~SET_BIT_MASK(low));
 
       }
 

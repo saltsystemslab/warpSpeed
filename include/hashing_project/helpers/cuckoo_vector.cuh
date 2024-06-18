@@ -79,6 +79,12 @@ namespace data_structs {
 
       data = (T * ) gallatin::allocators::global_malloc(sizeof(T)*rounded_size);
 
+      if (data == nullptr){
+
+        data = (T * ) gallatin::allocators::global_malloc(sizeof(T)*rounded_size);
+        printf("Bad allocation\n");
+      }
+
     }
 
     __device__ cuckoo_vector(){

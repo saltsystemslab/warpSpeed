@@ -7,7 +7,7 @@
  * ============================================================================
  */
 
-#define COUNT_PROBES 0
+#define COUNT_PROBES 1
 
 #define LOAD_CHEAP 0
 
@@ -36,17 +36,19 @@
 namespace fs = std::filesystem;
 
 
-#include <hashing_project/table_wrappers/p2_wrapper.cuh>
-#include <hashing_project/table_wrappers/dummy_ht.cuh>
-#include <hashing_project/table_wrappers/iht_wrapper.cuh>
-#include <hashing_project/table_wrappers/warpcore_wrapper.cuh>
+// #include <hashing_project/table_wrappers/p2_wrapper.cuh>
+// #include <hashing_project/table_wrappers/dummy_ht.cuh>
+// #include <hashing_project/table_wrappers/iht_wrapper.cuh>
+// #include <hashing_project/table_wrappers/warpcore_wrapper.cuh>
 #include <hashing_project/tables/p2_hashing_external.cuh>
 #include <hashing_project/tables/p2_hashing_internal.cuh>
-#include <hashing_project/tables/iht_double_hashing.cuh>
+//#include <hashing_project/tables/iht_double_hashing.cuh>
 #include <hashing_project/tables/double_hashing.cuh>
 #include <hashing_project/tables/iht_p2.cuh>
+#include <hashing_project/tables/iht_p2_metadata.cuh>
 #include <hashing_project/tables/chaining.cuh>
 #include <hashing_project/tables/p2_hashing_metadata.cuh>
+#include <hashing_project/tables/iht_p2_metadata_full.cuh>
 #include <hashing_project/tables/cuckoo.cuh>
 
 
@@ -181,7 +183,7 @@ __global__ void sawtooth_kernel(ht_type * table, DATA_TYPE * item_buffer, uint64
 
    uint64_t tid = gallatin::utils::get_tile_tid(my_tile);
 
-   if (tid >= n_keys*3) return;
+   if (tid >= n_keys*4) return;
 
    uint64_t my_key = item_buffer[tid];
 
@@ -512,11 +514,11 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
 
 
    //create buffers
-   DATA_TYPE * sawtooth_buffer = gallatin::utils::get_device_version<DATA_TYPE>(3*keys_per_round);
+   DATA_TYPE * sawtooth_buffer = gallatin::utils::get_device_version<DATA_TYPE>(4*keys_per_round);
 
    DATA_TYPE * negative_buffer = gallatin::utils::get_device_version<DATA_TYPE>(keys_per_round);
 
-   uint64_t * opcode_buffer = gallatin::utils::get_device_version<uint64_t>(3*keys_per_round);
+   uint64_t * opcode_buffer = gallatin::utils::get_device_version<uint64_t>(4*keys_per_round);
 
 
 
@@ -539,11 +541,7 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
    for (uint64_t i =0; i < n_loops; i++){
 
 
-
       //setup buffers!
-
-      //keys_deleted+=keys_per_round;
-      //then deletes
 
       cudaMemcpy(negative_buffer, negative_pattern+keys_deleted, sizeof(DATA_TYPE)*keys_per_round, cudaMemcpyHostToDevice);
 
@@ -556,11 +554,7 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
       keys_deleted+=keys_per_round;
 
 
-      //first is old_queries - pull from keys in table
-
-      //printf("Start of round %lu \n", i);
-
-      
+      //first is old_queries - pull from keys in table      
 
       set_opcodes(opcode_buffer, 0ULL, keys_per_round, 2ULL);
 
@@ -577,6 +571,10 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
       keys_inserted+=keys_per_round;
 
       set_opcodes(opcode_buffer, 2*keys_per_round, keys_per_round, 0ULL);
+
+
+      cudaMemcpy(sawtooth_buffer+3*keys_per_round, negative_pattern+i*keys_per_round, sizeof(DATA_TYPE)*keys_per_round, cudaMemcpyHostToDevice);
+      set_opcodes(opcode_buffer, 3*keys_per_round, keys_per_round, 2ULL);
 
       //flush
       helpers::get_num_probes();
@@ -655,12 +653,12 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
 
       gallatin::utils::timer sawtooth_timer;
 
-      sawtooth_kernel<ht_type, tile_size><<<(3*keys_per_round*tile_size-1)/256+1,256>>>(table, sawtooth_buffer, opcode_buffer, keys_per_round, misses);
+      sawtooth_kernel<ht_type, tile_size><<<(4*keys_per_round*tile_size-1)/256+1,256>>>(table, sawtooth_buffer, opcode_buffer, keys_per_round, misses);
 
       sawtooth_timer.sync_end();
 
       //write round
-      myfile << std::setprecision(12) << i << " " <<  1.0*3*keys_per_round/(sawtooth_timer.elapsed()*1000000) << "\n";
+      myfile << std::setprecision(12) << i << " " <<  1.0*4*keys_per_round/(sawtooth_timer.elapsed()*1000000) << "\n";
 
 
       total_time += sawtooth_timer.elapsed();
@@ -761,7 +759,7 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
    #else
 
    std::cout.imbue(std::locale(""));
-   printf("Done with %llu rounds in %f seconds, throughput %f\n", n_loops, total_time, 1.0*n_loops*3*keys_per_round/total_time);
+   printf("Done with %llu rounds in %f seconds, throughput %f\n", n_loops, total_time, 1.0*n_loops*4*keys_per_round/total_time);
 
 
    //write output
@@ -849,30 +847,26 @@ int main(int argc, char** argv) {
 
    sawtooth_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-
    sawtooth_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
+   sawtooth_test<hashing_project::tables::double_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   // sawtooth_test<hashing_project::tables::double_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   sawtooth_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+
 
    init_global_allocator(8ULL*1024*1024*1024, 111);
 
    sawtooth_test<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   //sawtooth_test<hashing_project::tables::cuckoo_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-
    free_global_allocator();
    
-   // sawtooth_test<hashing_project::tables::p2_int_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-
-   // sawtooth_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   sawtooth_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+      
+   
+   sawtooth_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
    
 
-
-   //sawtooth_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-   
-   //sawtooth_test<hashing_project::wrappers::cuckoo_generic, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-   
+   //sawtooth_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds); 
 
    cudaFreeHost(access_pattern);
 

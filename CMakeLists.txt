@@ -50,6 +50,13 @@ target_include_directories(hashing_project INTERFACE
 #   GIT_TAG origin/master
 # )
 
+
+# CPMAddPackage(
+#   NAME slabhash
+#   GITHUB_REPOSITORY sleeepyjack/warpcore
+#   GIT_TAG origin/master
+# )
+
 add_subdirectory(warpcore)
 
 
@@ -62,7 +69,9 @@ CPMAddPackage(
 set(HT_TESTS_BINARY_DIR "${CMAKE_BINARY_DIR}/tests")
 
 add_subdirectory(BGHT)
-
+  
+#slabhash is cursed so I think this links?
+add_subdirectory(SlabHash)
 
 # target_include_directories(hashing_project INTERFACE
 #                            "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
@@ -72,10 +81,11 @@ target_link_libraries(hashing_project INTERFACE ssl crypto)
 target_link_libraries(hashing_project INTERFACE warpcore)
 target_link_libraries(hashing_project INTERFACE gallatin)
 target_link_libraries(hashing_project INTERFACE bght)
+# target_link_libraries(hashing_project INTERFACE slabhash)
 
 #target_link_libraries(hashing_project INTERFACE ssl crypto)
 
-
+target_link_libraries(hashing_project INTERFACE slabhash)
 
 option(LINFO "Add lineInfo for NSight Compute profiling" OFF)
 

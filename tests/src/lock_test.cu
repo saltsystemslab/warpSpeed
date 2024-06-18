@@ -135,7 +135,7 @@ __global__ void test_locks_internal(uint64_t * accesses, uint64_t n_ops, lock_bu
 
    my_tile.sync();
 
-   atomicAnd((unsigned long long int *)&my_bucket->lock, (unsigned long long int) ~SET_BITMASK(0));
+   atomicAnd((unsigned long long int *)&my_bucket->lock, (unsigned long long int) ~SET_BIT_MASK(0));
 
 
 }
@@ -167,7 +167,7 @@ __global__ void test_locks_external(uint64_t * accesses, uint64_t n_ops, lock_bu
       uint64_t high = my_bucket_addr/64;
       uint64_t low = my_bucket_addr % 64;
 
-      while (atomicOr((unsigned long long int *)&locks[high], (unsigned long long int) SET_BITMASK(low)) & SET_BITMASK(low));
+      while (atomicOr((unsigned long long int *)&locks[high], (unsigned long long int) SET_BIT_MASK(low)) & SET_BIT_MASK(low));
 
    }
 
@@ -195,8 +195,8 @@ __global__ void test_locks_external(uint64_t * accesses, uint64_t n_ops, lock_bu
    uint64_t high = my_bucket_addr/64;
    uint64_t low = my_bucket_addr % 64;
 
-   //if old is 0, SET_BITMASK & 0 is 0 - loop exit.
-   atomicAnd((unsigned long long int *)&locks[high], (unsigned long long int) ~SET_BITMASK(low));
+   //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
+   atomicAnd((unsigned long long int *)&locks[high], (unsigned long long int) ~SET_BIT_MASK(low));
 
 }
 

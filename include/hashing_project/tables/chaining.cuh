@@ -23,7 +23,7 @@
 #include <hashing_project/helpers/ht_load.cuh>
 
 
-#define COUNT_CHAINING_NEXT_LOAD 1
+#define COUNT_CHAINING_NEXT_LOAD 0
 
 namespace cg = cooperative_groups;
 
@@ -52,6 +52,41 @@ namespace tables {
       Key key;
       Val val;
    };
+
+
+   // template <typename Key, typename Val>
+   // __device__ chain_pair<Key, Val> load_chain_packed_pair(chain_pair<Key, Val> * pair_to_load){
+   //    asm volatile ("trap;");
+   // }
+
+
+   // template<>
+   // __device__ chain_pair<uint32_t, uint32_t> load_chain_packed_pair(chain_pair<uint32_t, uint32_t> * pair_to_load){
+
+   //       //load 8 tags and pack them
+
+   //          chain_pair<uint32_t,uint32_t> loaded_pair;
+
+   //          asm volatile("ld.gpu.acquire.v2.u32 {%0,%1}, [%2];" : "=r"(loaded_pair.key), "=r"(loaded_pair.val) : "l"(&pair_to_load));
+            
+   //          return loaded_pair;
+
+
+   // }
+
+   // template<>
+   // __device__ chain_pair<uint64_t, uint64_t> load_chain_packed_pair(chain_pair<uint64_t, uint64_t> * pair_to_load){
+
+   //       //load 8 tags and pack them
+
+   //       chain_pair<uint64_t,uint64_t> loaded_pair;
+
+   //       asm volatile("ld.gpu.acquire.v2.u64 {%0,%1}, [%2];" : "=l"(loaded_pair.key), "=l"(loaded_pair.val) : "l"(&pair_to_load));
+         
+   //       return loaded_pair;
+
+
+   // }
 
 
    template <typename ht_type>
@@ -140,14 +175,24 @@ namespace tables {
          team.sync();
       }
 
-      pair_type load_packed_pair(int index){
+      __device__ pair_type load_packed_pair(int index){
             //load 8 tags and pack them
 
-            pair_type loaded_pair;
 
-            asm volatile("ld.gpu.acquire.v2.u64 {%0,%1}, [%2];" : "=l"(loaded_pair.key), "=l"(loaded_pair.val) : "l"(&slots[index]));
+            //pair_type loaded_pair;
+
+            // pair_type loaded_pair;
+
+            // loaded_pair.key = hash_table_load(&slots[index].key);
+            // loaded_pair.val = hash_table_load(&slots[index].val);
+
+            // return loaded_pair;
+
+            return ht_load_packed_pair<pair_type, Key, Val>(&slots[index]);
+
+            // asm volatile("ld.gpu.acquire.v2.u64 {%0,%1}, [%2];" : "=l"(loaded_pair.key), "=l"(loaded_pair.val) : "l"(&slots[index]));
             
-            return loaded_pair;
+            // return loaded_pair;
 
       }
 
@@ -157,6 +202,8 @@ namespace tables {
 
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
+
+            ADD_PROBE_ADJUSTED
             //uint offset = i - my_tile.thread_rank();
 
             bool key_match = (i < bucket_size-1);
@@ -191,7 +238,7 @@ namespace tables {
                   //no need to recheck, I observed previously.
                   ADD_PROBE
                   if (typed_atomic_write(&slots[i].key, defaultKey, insertKey)){
-                     gallatin::utils::st_rel(&slots[i].val,insertVal);
+                     ht_store(&slots[i].val,insertVal);
 
                      success = true;
       
@@ -223,7 +270,7 @@ namespace tables {
                   //no need to recheck, I observed previously.
                   ADD_PROBE
                   if (typed_atomic_write(&slots[i].key, tombstoneKey, insertKey)){
-                     gallatin::utils::st_rel(&slots[i].val,insertVal);
+                     ht_store(&slots[i].val,insertVal);
 
                      success = true;
       
@@ -304,7 +351,7 @@ namespace tables {
                   ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
                   if (ballot){
 
-                     gallatin::utils::st_rel(&slots[i].val, ext_val);
+                     ht_store(&slots[i].val, ext_val);
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                } 
@@ -329,18 +376,18 @@ namespace tables {
 
                      //loop and wait on tombstone val to be done.
 
-                     Val loaded_val = hash_table_load(&slots[i].val);
+                     // Val loaded_val = hash_table_load(&slots[i].val);
 
-                     while(loaded_val != tombstoneVal){
+                     // while(loaded_val != tombstoneVal){
 
-                        //this may be an issue if a stored value is legitimately a tombstone - need special logic in delete?
-                        loaded_val = hash_table_load(&slots[i].val);
-                        __threadfence();
-                     }
+                     //    //this may be an issue if a stored value is legitimately a tombstone - need special logic in delete?
+                     //    loaded_val = hash_table_load(&slots[i].val);
+                     //    __threadfence();
+                     // }
 
-                     __threadfence();
+                     // __threadfence();
 
-                     gallatin::utils::st_rel(&slots[i].val, ext_val);
+                     ht_store(&slots[i].val, ext_val);
 
 
                   }
@@ -364,7 +411,7 @@ namespace tables {
          }
 
 
-         return -1;
+         return false;
 
       }
 
@@ -402,7 +449,7 @@ namespace tables {
                   ballot = typed_atomic_write(&slots[i].key, ext_key, ext_key);
                   if (ballot){
 
-                     gallatin::utils::st_rel(&slots[i].val, ext_val);
+                     ht_store(&slots[i].val, ext_val);
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                }
@@ -526,6 +573,8 @@ namespace tables {
 
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
+            ADD_PROBE_ADJUSTED
+
             uint offset = i - my_tile.thread_rank();
 
             bool valid = i < bucket_size-1;
@@ -535,6 +584,9 @@ namespace tables {
             pair_type * return_val = nullptr;
 
             if (valid){
+
+
+
                Key loaded_key = hash_table_load(&slots[i].key);
 
                found_ballot = (loaded_key == ext_key);
@@ -561,6 +613,51 @@ namespace tables {
          return nullptr;
 
       }
+
+      __device__ pair_type query_packed(const cg::thread_block_tile<partition_size> & my_tile, Key ext_key){
+
+
+         for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
+
+            uint offset = i - my_tile.thread_rank();
+
+            bool valid = i < bucket_size-1;
+
+            bool found_ballot = false;
+
+            pair_type return_val;
+
+            if (valid){
+
+               return_val = load_packed_pair(i);
+
+               //Key loaded_key = hash_table_load(&slots[i].key);
+
+               found_ballot = (return_val.key == ext_key);
+
+               // if (found_ballot){
+               //    return_val = &slots[i];
+               // }
+            }
+
+
+            int found = __ffs(my_tile.ballot(found_ballot))-1;
+
+            if (found == -1) continue;
+
+            return_val = my_tile.shfl(return_val, found);
+
+            return return_val;
+
+
+
+         }
+
+
+         return pair_type{defaultKey, defaultVal};
+
+      }
+
 
       // __device__ bool erase(cg::thread_block_tile<partition_size> my_tile, Key ext_key){
 
@@ -597,7 +694,7 @@ namespace tables {
       //             if (ballot){
 
       //                //force store
-      //                gallatin::utils::st_rel(&slots[i].val, tombstoneVal);
+      //                ht_store(&slots[i].val, tombstoneVal);
       //                //typed_atomic_exchange(&slots[i].val, ext_val);
       //             }
       //          }
@@ -753,29 +850,78 @@ namespace tables {
 
       __device__ void stall_lock_one_thread(uint64_t bucket){
 
+         #if LOAD_CHEAP
+         return;
+         #endif
+
          uint64_t high = bucket/64;
          uint64_t low = bucket % 64;
 
-         //if old is 0, SET_BITMASK & 0 is 0 - loop exit.
+         //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
 
          do {
             ADD_PROBE
+            //printf("Looping in key lock %lu\n", bucket);
          }
-         while (atomicOr((unsigned long long int *)&locks[high], (unsigned long long int) SET_BITMASK(low)) & SET_BITMASK(low));
+         while (atomicOr((unsigned long long int *)&locks[high], (unsigned long long int) SET_BIT_MASK(low)) & SET_BIT_MASK(low));
 
       }
 
       __device__ void unlock(tile_type my_tile, uint64_t bucket){
 
-         ADD_PROBE_TILE
          if (my_tile.thread_rank() == 0){
+
+            //printf("Unlocking %lu\n", bucket);
             unlock_bucket_one_thread(bucket);
+            //printf("Unlocked %lu\n",bucket);
+
          }
 
          my_tile.sync();
 
       }
 
+      __device__ void lock_key(tile_type my_tile, Key key){
+
+         uint64_t my_slot = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
+
+         stall_lock(my_tile, my_slot);
+
+
+
+      }
+
+
+      __device__ uint64_t get_lock_bucket(tile_type my_tile, Key key){
+
+         uint64_t my_slot = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
+
+
+         return my_slot;
+
+      }
+
+      __host__ uint64_t get_num_locks(){
+
+         my_type * host_version = gallatin::utils::copy_to_host<my_type>(this);
+
+         uint64_t nblocks = host_version->nblocks;
+
+         cudaFreeHost(host_version);
+
+         return nblocks;
+      }
+
+      __device__ void unlock_key(tile_type my_tile, Key key){
+
+         uint64_t my_slot = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
+
+         unlock(my_tile, my_slot);
+
+      }
+
+
+      
 
       __device__ void free_chain(uint64_t tid){
 
@@ -820,11 +966,17 @@ namespace tables {
 
       __device__ void unlock_bucket_one_thread(uint64_t bucket){
 
+         #if LOAD_CHEAP
+         return;
+         #endif
+
+         ADD_PROBE
+         
          uint64_t high = bucket/64;
          uint64_t low = bucket % 64;
 
-         //if old is 0, SET_BITMASK & 0 is 0 - loop exit.
-         atomicAnd((unsigned long long int *)&locks[high], (unsigned long long int) ~SET_BITMASK(low));
+         //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
+         atomicAnd((unsigned long long int *)&locks[high], (unsigned long long int) ~SET_BIT_MASK(low));
 
       }
 
@@ -888,7 +1040,7 @@ namespace tables {
       }
 
 
-      __device__ bool upsert_generic_nolock(const cg::thread_block_tile<partition_size> & my_tile, const Key & newKey, const Val & newVal){
+      __device__ bool upsert_generic_internal(const cg::thread_block_tile<partition_size> & my_tile, const Key & newKey, const Val & newVal){
 
          uint64_t my_slot;
          block_type * my_block;
@@ -914,10 +1066,12 @@ namespace tables {
 
          while (true){
 
+            //printf("Looping in insert\n");
+
             ADD_PROBE_BUCKET
             if (my_block == nullptr){
                //failure to find new segment
-               if (!attach_block(my_tile, my_pointer_addr)) return;
+               if (!attach_block(my_tile, my_pointer_addr)) return false;
 
                my_block = my_pointer_addr[0];
                continue;
@@ -947,6 +1101,42 @@ namespace tables {
 
          return false;
       }
+
+
+      __device__ bool upsert_no_lock(const tile_type & my_tile, const Key & key, const Val & val){
+
+         uint64_t bucket_0 = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
+
+         //stall_lock(my_tile, bucket_0);
+
+
+         //query
+
+         //Val * stored_val = query_reference(tile_type my_tile, Key key){
+
+         packed_pair_type * stored_copy = query_packed_reference(my_tile, key, bucket_0);
+
+         if (stored_copy != nullptr){
+
+            //upsert
+            ht_store(&stored_copy->val, val);
+
+            //unlock(my_tile, bucket_0);
+            return true;
+
+         }
+
+
+
+         bool return_val = upsert_generic_internal(my_tile, key, val);
+
+         //unlock(my_tile, bucket_0);
+
+         return true;
+
+
+      }
+
 
       __device__ void insert(cg::thread_block_tile<partition_size> my_tile, Key newKey, Val newVal){
 
@@ -1013,7 +1203,7 @@ namespace tables {
          if (stored_copy != nullptr){
 
             //upsert
-            gallatin::utils::st_rel(&stored_copy->val, val);
+            ht_store(&stored_copy->val, val);
 
             unlock(my_tile, bucket_0);
             return true;
@@ -1022,7 +1212,7 @@ namespace tables {
 
 
 
-         bool return_val = upsert_generic_nolock(my_tile, key, val);
+         bool return_val = upsert_generic_internal(my_tile, key, val);
 
          unlock(my_tile, bucket_0);
 
@@ -1047,7 +1237,7 @@ namespace tables {
 
          while (my_block != nullptr){
 
-            ADD_PROBE_BUCKET
+            
             return_val = my_block->query_packed_reference(my_tile, queryKey);
 
             if (return_val != nullptr) return return_val;
@@ -1065,6 +1255,62 @@ namespace tables {
 
       }
 
+      __device__ packed_pair_type query_packed(cg::thread_block_tile<partition_size> my_tile, Key queryKey, uint64_t my_slot){
+
+
+         //uint64_t my_slot = gallatin::hashers::MurmurHash64A(&queryKey, sizeof(Key), seed) % nblocks;
+
+
+         #if COUNT_CHAINING_NEXT_LOAD
+         ADD_PROBE_TILE
+         #endif
+
+         block_type * my_block = (block_type *) hash_table_load<uint64_t>((uint64_t *)&pointer_list[my_slot]);
+
+         packed_pair_type return_val;
+
+         while (my_block != nullptr){
+
+            ADD_PROBE_BUCKET
+            return_val = my_block->query_packed(my_tile, queryKey);
+
+            if (return_val.key == queryKey) return return_val;
+
+            #if COUNT_CHAINING_NEXT_LOAD
+            ADD_PROBE_TILE
+            #endif
+            my_block = (block_type *) hash_table_load((uint64_t *)&my_block->next);
+
+         }
+
+
+         return packed_pair_type{defaultKey, defaultVal};
+
+
+      }
+
+      // __device__ bool find_with_reference(cg::thread_block_tile<partition_size> my_tile, Key queryKey, Val & returnVal){
+
+      //    uint64_t my_slot = gallatin::hashers::MurmurHash64A(&queryKey, sizeof(Key), seed) % nblocks;
+
+      //    stall_lock(my_tile, my_slot);
+
+
+      //    packed_pair_type queried_value = query_packed(my_tile, queryKey, my_slot);
+
+      //    if (queried_value.key != queryKey){
+      //       unlock(my_tile, my_slot);
+      //       return false;
+      //    }
+
+      //    returnVal = queried_value.val;
+
+      //    unlock(my_tile, my_slot);
+
+      //    return true;
+
+      // }
+
       __device__ bool find_with_reference(cg::thread_block_tile<partition_size> my_tile, Key queryKey, Val & returnVal){
 
          uint64_t my_slot = gallatin::hashers::MurmurHash64A(&queryKey, sizeof(Key), seed) % nblocks;
@@ -1075,13 +1321,40 @@ namespace tables {
          packed_pair_type * queried_value = query_packed_reference(my_tile, queryKey, my_slot);
 
          if (queried_value == nullptr){
+
             unlock(my_tile, my_slot);
+            return false;
+
+         }
+
+         if (my_tile.thread_rank() == 0){
+            returnVal = hash_table_load(&queried_value->val);
+         }
+
+         returnVal = my_tile.shfl(returnVal, 0);
+
+         unlock(my_tile, my_slot);
+
+         return true;
+
+      }
+
+      __device__ bool find_with_reference_no_lock(cg::thread_block_tile<partition_size> my_tile, Key queryKey, Val & returnVal){
+
+         uint64_t my_slot = gallatin::hashers::MurmurHash64A(&queryKey, sizeof(Key), seed) % nblocks;
+
+         //stall_lock(my_tile, my_slot);
+
+         packed_pair_type queried_value = query_packed(my_tile, queryKey, my_slot);
+
+         if (queried_value.key != queryKey){
+            //unlock(my_tile, my_slot);
             return false;
          }
 
-         returnVal = hash_table_load(&queried_value->val);
+         returnVal = queried_value.val;
 
-         unlock(my_tile, my_slot);
+         //unlock(my_tile, my_slot);
 
          return true;
 
@@ -1108,9 +1381,18 @@ namespace tables {
 
 
          ADD_PROBE_TILE
-         if (gallatin::utils::typed_atomic_write(&queried_value->key, removeKey, tombstoneKey)){
 
-            gallatin::utils::st_rel(&queried_value->val, tombstoneVal);
+         bool erased = false;
+
+         if (my_tile.thread_rank() == 0){
+            erased = gallatin::utils::typed_atomic_write(&queried_value->key, removeKey, tombstoneKey);
+         }
+
+         erased = my_tile.ballot(erased);
+
+         if (erased){
+
+            //ht_store(&queried_value->val, tombstoneVal);
 
             unlock(my_tile, my_slot);
 
@@ -1118,6 +1400,48 @@ namespace tables {
          }
 
          unlock(my_tile, my_slot);
+         return false;
+
+
+      }
+
+
+      __device__ bool remove_no_lock(cg::thread_block_tile<partition_size> my_tile, Key removeKey){
+
+
+         uint64_t my_slot = gallatin::hashers::MurmurHash64A(&removeKey, sizeof(Key), seed) % nblocks;
+
+         //stall_lock(my_tile, my_slot);
+
+         packed_pair_type * queried_value = query_packed_reference(my_tile, removeKey, my_slot);
+
+         //overwrite
+
+         if (queried_value == nullptr){
+
+            //unlock(my_tile, my_slot);
+            return false;
+
+         }
+
+         ADD_PROBE_TILE
+         bool erased = false;
+
+         if (my_tile.thread_rank() == 0){
+            erased = gallatin::utils::typed_atomic_write(&queried_value->key, removeKey, tombstoneKey);
+         }
+
+         erased = my_tile.ballot(erased);
+
+         if (erased){
+
+            //ht_store(&queried_value->val, tombstoneVal);
+
+            
+            return true;
+         }
+
+         
          return false;
 
 
@@ -1187,13 +1511,23 @@ namespace tables {
 
    };
 
+template <typename T>
+constexpr T generate_chaining_tombstone(uint64_t offset) {
+  return (~((T) 0)) - offset;
+};
+
+template <typename T>
+constexpr T generate_chaining_sentinel() {
+  return ((T) 0);
+};
+
 template <typename Key, typename Val, uint tile_size, uint bucket_size>
 using chaining_generic = typename hashing_project::tables::chaining_table<Key,
-                                    generate_double_sentinel<Key>(),
-                                    generate_double_tombstone<Key>(0),
+                                    generate_chaining_sentinel<Key>(),
+                                    generate_chaining_tombstone<Key>(0),
                                     Val,
-                                    generate_double_sentinel<Val>(),
-                                    generate_double_tombstone<Val>(0),
+                                    generate_chaining_sentinel<Val>(),
+                                    generate_chaining_tombstone<Val>(0),
                                     tile_size,
                                     bucket_size>;
 

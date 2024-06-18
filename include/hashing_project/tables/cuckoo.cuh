@@ -8,7 +8,7 @@
 #include <cuda_runtime_api.h>
 
 #include <gallatin/allocators/alloc_utils.cuh>
-#include <hashing_project/helpers/cuckoo_vector.cuh>
+#include <hashing_project/helpers/const_cuckoo_vector.cuh>
 #include <hashing_project/helpers/ht_load.cuh>
 
 #include "assert.h"
@@ -26,8 +26,13 @@ namespace cg = cooperative_groups;
 // a pointer list managing a set section of device memory
 
 #define N_CUCKOO_HASHES 3
-#define CUCKOO_MAX_PROBES 2
+#define CUCKOO_MAX_PROBES 20
 
+#define MAX_CUCKOO_ATTEMPTS 500
+
+#define MEASURE_LOCKS 1
+
+#define DEBUG_PRINTS 0
 
 //cache protocol
 //query cache
@@ -114,7 +119,7 @@ namespace tables {
 
             auto ballot_result = my_tile.ballot(ballot);
 
-               while (ballot_result){
+            while (ballot_result){
 
                   ballot = false;
 
@@ -124,6 +129,8 @@ namespace tables {
 
 
                      ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
+
+                     ADD_PROBE
                      if (ballot){
 
                         gallatin::utils::st_rel(&slots[i].val, ext_val);
@@ -157,21 +164,25 @@ namespace tables {
                   const auto leader = __ffs(ballot_result)-1;
 
                   if (leader == my_tile.thread_rank()){
+
                      ballot = typed_atomic_write(&slots[i].key, tombstoneKey, ext_key);
+
+                     ADD_PROBE
+
                      if (ballot){
 
                         //loop and wait on tombstone val to be done.
 
-                        Val loaded_val = hash_table_load(&slots[i].val);
+                        // Val loaded_val = hash_table_load(&slots[i].val);
 
-                        while(loaded_val != tombstoneVal){
-                           loaded_val = hash_table_load(&slots[i].val);
-                           __threadfence();
+                        // while(loaded_val != tombstoneVal){
+                        //    loaded_val = hash_table_load(&slots[i].val);
+                        //    __threadfence();
 
-                           printf("Looping in tombstone\n");
-                        }
+                        //    //printf("Looping in tombstone\n");
+                        // }
 
-                        __threadfence();
+                        // __threadfence();
 
                         gallatin::utils::st_rel(&slots[i].val, ext_val);
                         //typed_atomic_write(&slots[i].val, ext_val);
@@ -242,14 +253,13 @@ namespace tables {
             while (ballot_result){
 
                bool ballot = false;
-               bool ballot_exists = false;
 
                const auto leader = __ffs(ballot_result)-1;
 
 
                if (leader == my_tile.thread_rank() && empty_ballot){
 
-                  ballot_exists = true;
+                  ADD_PROBE
 
                   ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
                   if (ballot){
@@ -263,8 +273,8 @@ namespace tables {
   
 
                //if leader succeeds return
-               if (my_tile.ballot(ballot_exists)){
-                  return my_tile.ballot(ballot);
+               if (my_tile.ballot(ballot)){
+                  return true;
                }
                
 
@@ -272,27 +282,31 @@ namespace tables {
 
                if (leader == my_tile.thread_rank() && tombstone_ballot){
 
-                  ballot_exists = true;
-
                   ballot = typed_atomic_write(&slots[i].key, tombstoneKey, ext_key);
+
+                  ADD_PROBE
 
                   if (ballot){
 
                      //loop and wait on tombstone val to be done.
 
-                     Val loaded_val = hash_table_load(&slots[i].val);
+                     // Val loaded_val = hash_table_load(&slots[i].val);
 
-                     while(loaded_val != tombstoneVal){
+                     // while(loaded_val != tombstoneVal){
 
-                        //this may be an issue if a stored value is legitimately a tombstone - need special logic in delete?
-                        loaded_val = hash_table_load(&slots[i].val);
-                        __threadfence();
-                        printf("Looping in tombstone 2\n");
-                     }
+                     //    //this may be an issue if a stored value is legitimately a tombstone - need special logic in delete?
+                     //    loaded_val = hash_table_load(&slots[i].val);
+                     //    __threadfence();
+                     //    #if DEBUG_PRINTS
+                     //    printf("Looping in tombstone 2\n");
+                     //    #endif
+                     // }
 
-                     __threadfence();
+                     
 
                      gallatin::utils::st_rel(&slots[i].val, ext_val);
+
+                     __threadfence();
 
 
                   }
@@ -300,8 +314,8 @@ namespace tables {
                }
 
                //if leader succeeds return
-               if (my_tile.ballot(ballot_exists)){
-                  return my_tile.ballot(ballot);
+               if (my_tile.ballot(ballot)){
+                  return true;
                }
                   
 
@@ -316,7 +330,7 @@ namespace tables {
          }
 
 
-         return -1;
+         return false;
 
       }
 
@@ -352,7 +366,7 @@ namespace tables {
 
                if (leader == my_tile.thread_rank()){
 
-
+                  ADD_PROBE
                   ballot = typed_atomic_write(&slots[i].key, ext_key, ext_key);
                   if (ballot){
 
@@ -384,12 +398,12 @@ namespace tables {
       }
 
 
+
       //calculate the available slots int the bucket
       //deposit into a trio of uints for return
       //these each are the result of the a block-wide ballot on empty, tombstone, or key_match
       //allowing one ld_acq of the bucket to service all requests.
       __device__ void load_fill_ballots(const cg::thread_block_tile<partition_size> & my_tile, const Key & upsert_key, __restrict__ uint & empty_match, __restrict__ uint & tombstone_match, __restrict__ uint & key_match){
-
 
          //wipe previous
          empty_match = 0U;
@@ -405,6 +419,7 @@ namespace tables {
 
             bool valid = i < bucket_size;
 
+            ADD_PROBE_ADJUSTED
             
 
             bool found_empty = false;
@@ -432,11 +447,148 @@ namespace tables {
       }
 
 
+      __device__ void load_fill_ballots_match(const cg::thread_block_tile<partition_size> & my_tile, const Key & upsert_key, __restrict__ uint & key_match){
+
+
+         
+         //wipe previous
+         key_match = 0U;
+
+         int my_count = 0;
+
+         for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
+
+            ADD_PROBE_ADJUSTED
+
+            //step in clean intervals of my_tile. 
+            uint offset = i - my_tile.thread_rank();
+
+            bool valid = i < bucket_size;
+
+
+            bool found_exact = false;
+
+            bool found_empty = false;
+
+            if (valid){
+
+               Key loaded_key = hash_table_load(&slots[i].key);
+
+
+               found_exact = (loaded_key == upsert_key);
+
+               found_empty = (loaded_key == defaultKey);
+
+            }
+
+            key_match |= (my_tile.ballot(found_exact) << offset);
+
+            if (key_match) return;
+
+            if (my_tile.ballot(found_empty)) return;
+
+         }
+
+         return;
+
+      }
+
+
+
+      __device__ bool load_fill_ballots_upserts(const cg::thread_block_tile<partition_size> & my_tile, const Key & upsert_key, const Val & upsert_val, __restrict__ uint & tombstone_match){
+
+
+         //wipe previous
+         tombstone_match = 0U;
+
+
+         int my_count = 0;
+
+         for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
+
+
+            ADD_PROBE_ADJUSTED
+
+            //step in clean intervals of my_tile. 
+            uint offset = i - my_tile.thread_rank();
+
+            bool valid = i < bucket_size;
+
+            
+
+            bool found_empty = false;
+            bool found_tombstone = false;
+            bool found_exact = false;
+
+            if (valid){
+
+               Key loaded_key = hash_table_load(&slots[i].key);
+
+               found_empty = (loaded_key == defaultKey);
+               found_tombstone = (loaded_key == tombstoneKey);
+               found_exact = (loaded_key == upsert_key);
+
+            }
+
+           
+            tombstone_match |= (my_tile.ballot(found_tombstone) << offset);
+
+
+
+
+
+            //if (empty_match || key_match) return;
+
+            int leader = __ffs(my_tile.ballot(found_exact))-1;
+
+            bool ballot = false;
+
+            if (leader == my_tile.thread_rank()){
+
+               ADD_PROBE
+
+               if (gallatin::utils::typed_atomic_write(&slots[i].key, upsert_key, upsert_key)){
+
+                  gallatin::utils::st_rel(&slots[i].val, upsert_val);
+                  ballot = true;
+
+
+               }
+
+            }
+
+            //upserted.
+            if (my_tile.ballot(ballot)) return true;
+
+            leader = __ffs(my_tile.ballot(found_empty))-1;
+
+            if (leader == my_tile.thread_rank()){
+
+               ADD_PROBE
+
+               if (gallatin::utils::typed_atomic_write(&slots[i].key, defaultKey, upsert_key)){
+                  gallatin::utils::st_rel(&slots[i].val, upsert_val);
+                  ballot = true;
+               }
+
+            }
+
+            if (my_tile.ballot(ballot)) return true;
+
+         }
+
+         return false;
+
+      }
+
 
       __device__ bool query(const cg::thread_block_tile<partition_size> & my_tile, Key ext_key, Val & return_val){
 
+         
 
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
+
+            ADD_PROBE_ADJUSTED
 
             uint offset = i - my_tile.thread_rank();
 
@@ -509,6 +661,9 @@ namespace tables {
       __device__ bool erase(cg::thread_block_tile<partition_size> my_tile, Key ext_key){
 
 
+         //acquire lock.
+
+
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
             uint offset = i - my_tile.thread_rank();
@@ -536,12 +691,12 @@ namespace tables {
 
                if (leader == my_tile.thread_rank()){
 
-
+                  ADD_PROBE
                   ballot = typed_atomic_write(&slots[i].key, ext_key, tombstoneKey);
                   if (ballot){
 
                      //force store
-                     gallatin::utils::st_rel(&slots[i].val, tombstoneVal);
+                     //gallatin::utils::st_rel(&slots[i].val, tombstoneVal);
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                }
@@ -599,7 +754,7 @@ namespace tables {
 
       using packed_pair_type = cuckoo_pair<Key, Val>;
 
-      using vector_type = hashing_project::data_structs::cuckoo_vector<hashing_project::data_structs::vector_pair<Key>>;
+      using vector_type = hashing_project::data_structs::cuckoo_vector<hashing_project::data_structs::vector_pair<Key>, CUCKOO_MAX_PROBES+1>;
 
       bucket_type * primary_buckets;
       uint64_t * primary_locks;
@@ -663,6 +818,10 @@ namespace tables {
 
       __device__ void stall_lock_one_thread_primary(uint64_t bucket){
 
+         #if LOAD_CHEAP
+         return;
+         #endif
+
          uint64_t high = bucket/64;
          uint64_t low = bucket % 64;
 
@@ -687,17 +846,19 @@ namespace tables {
          // }
 
 
-         //if old is 0, SET_BITMASK & 0 is 0 - loop exit.
+         //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
 
          do {
-            #if MEASURE_LOCKS
             ADD_PROBE
+            #if DEBUG_PRINTS
+            printf("Looping on lock %llu\n", bucket);
             #endif
-            //printf("Stalling on %lx\n", bucket);
-
          }
-         while (atomicOr((unsigned long long int *)&primary_locks[high], (unsigned long long int) SET_BITMASK(low)) & SET_BITMASK(low));
+         while (atomicOr((unsigned long long int *)&primary_locks[high], (unsigned long long int) SET_BIT_MASK(low)) & SET_BIT_MASK(low));
 
+         #if DEBUG_PRINTS
+         printf("Lock %llu acquired\n", bucket);
+         #endif
 
 
       }
@@ -717,13 +878,111 @@ namespace tables {
 
       __device__ void unlock_bucket_one_thread_primary(uint64_t bucket){
 
+         #if LOAD_CHEAP
+         return;
+         #endif
+
          uint64_t high = bucket/64;
          uint64_t low = bucket % 64;
 
-         //if old is 0, SET_BITMASK & 0 is 0 - loop exit.
-         atomicAnd((unsigned long long int *)&primary_locks[high], (unsigned long long int) ~SET_BITMASK(low));
+         ADD_PROBE
+
+         //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
+         atomicAnd((unsigned long long int *)&primary_locks[high], (unsigned long long int) ~SET_BIT_MASK(low));
       }
 
+
+
+      __device__ void lock_key_buckets(uint64_t bucket_0, uint64_t bucket_1, uint64_t bucket_2){
+
+
+         if (bucket_0 > bucket_1){
+            uint64_t temp = bucket_1;
+            bucket_1 = bucket_0;
+            bucket_0 = temp;
+         }
+
+         //after this, bucket_0 < bucket 1
+
+         if (bucket_1 > bucket_2){
+            uint64_t temp = bucket_2;
+            bucket_2 = bucket_1;
+            bucket_1 = bucket_0;
+
+            //after this point, bucket 2 is the largest key
+            //but maybe bucket 1 < bucket_0
+
+            if (bucket_0 > bucket_1){
+               temp = bucket_1;
+               bucket_1 = bucket_0;
+               bucket_0 = temp;
+            }
+
+
+         }
+
+
+
+         //from here, locks are ordered
+         stall_lock_one_thread_primary(bucket_0);
+
+         if (bucket_1 != bucket_0){
+            stall_lock_one_thread_primary(bucket_1);
+         }
+
+         if (bucket_2 != bucket_0 && bucket_2 != bucket_1){
+            stall_lock_one_thread_primary(bucket_2);
+         }
+
+
+
+      }
+
+
+      __device__ void unlock_key_buckets(uint64_t bucket_0, uint64_t bucket_1, uint64_t bucket_2){
+
+
+         if (bucket_0 > bucket_1){
+            uint64_t temp = bucket_1;
+            bucket_1 = bucket_0;
+            bucket_0 = temp;
+         }
+
+         //after this, bucket_0 < bucket 1
+
+         if (bucket_1 > bucket_2){
+            uint64_t temp = bucket_2;
+            bucket_2 = bucket_1;
+            bucket_1 = bucket_0;
+
+            //after this point, bucket 2 is the largest key
+            //but maybe bucket 1 < bucket_0
+
+            if (bucket_0 > bucket_1){
+               temp = bucket_1;
+               bucket_1 = bucket_0;
+               bucket_0 = temp;
+            }
+
+
+         }
+
+         if (bucket_0 > bucket_1 || bucket_1 > bucket_2) printf("Bad sort\n");
+
+
+         //from here, locks are ordered
+         unlock_bucket_one_thread_primary(bucket_0);
+
+         if (bucket_1 != bucket_0){
+            unlock_bucket_one_thread_primary(bucket_1);
+         }
+
+         if (bucket_2 != bucket_0 && bucket_2 != bucket_1){
+            unlock_bucket_one_thread_primary(bucket_2);
+         }
+
+
+      }
 
 
       //device-side murmurhash64a
@@ -801,7 +1060,104 @@ namespace tables {
       }
 
 
+      //boot keys one at a time based on our optimistic route.
+      //This takes a single key and it's current bucket and uses that to boot.
+      //returns false if the route changed in any detectable way - implies failure in routing and retry needed.
+      //As a potential optimization this could take in the address of the next empty location
+      // but currently it locks the region and performs a series of atomics
+      // this temporarily results in a double copy of a key, but the key can only be manipulated while holding the primary lock
+      // so this should be safe.
+      __device__ bool boot_key_next(const tile_type & my_tile, const Key & key, int current_bucket_index){
+
+         uint64_t primary_bucket = get_current_bucket(key, 0);
+
+         //lock bucket.
+         stall_lock_primary(my_tile, primary_bucket);
+
+
+         uint64_t current_bucket = get_current_bucket(key, current_bucket_index);
+         bucket_type * current_bucket_ptr = get_bucket_ptr_primary(current_bucket);
+
+         uint64_t next_bucket = get_current_bucket(key, (current_bucket_index + 1) % N_CUCKOO_HASHES);
+
+         bucket_type * next_bucket_ptr = get_bucket_ptr_primary(next_bucket);
+
+         Val queried_val;
+
+
+         uint bucket_match;
+
+         current_bucket_ptr->load_fill_ballots_match(my_tile, key, bucket_match);
+
+         //failed find.
+         if (__popc(bucket_match) == 0){
+
+            unlock_primary(my_tile, primary_bucket);
+            return false;
+         }
+
+         packed_pair_type * val_loc = current_bucket_ptr->query_pair_ballot(my_tile, bucket_match);
+
+         if (my_tile.thread_rank() == 0){
+            queried_val = hash_table_load(&val_loc->val);
+         }
+
+         queried_val = my_tile.shfl(queried_val, 0);
+
+
+         uint bucket_empty;
+         uint bucket_tombstone;
+
+         next_bucket_ptr->load_fill_ballots(my_tile, key, bucket_empty, bucket_tombstone, bucket_match);
+
+
+         if (!next_bucket_ptr->insert_ballots(my_tile, key, queried_val, bucket_empty, bucket_tombstone)){
+
+            //not insertable - someone preempted us.
+            unlock_primary(my_tile, primary_bucket);
+            return false;
+         }
+
+         my_tile.sync();
+
+         Val alt_queried_val;
+
+         //this doesn't trigger?
+         // if (!next_bucket_ptr->query(my_tile, key, alt_queried_val)){
+         //    printf("Failed to cuckoo and query key %llu\n", key); 
+         // }
+
+         //at this point the key is moved and the chain can proceed.
+         //remove. this cannot fail - so we just write empty!
+
+         if (my_tile.thread_rank() == 0){
+
+            //force st.rel and threadfence to enforce morally strong.
+            //should be visible to future threads
+            // overwrite of val is not necessary - future inserts will overwrite in a morally strong fashion.
+            // gated by lock acquistion of the key in future efforts.
+
+            // if (!gallatin::utils::typed_atomic_write(&val_loc->key, key, tombstoneKey)){
+            //    printf("Failed to erase\n");
+            // }
+            ht_store(&val_loc->key, tombstoneKey);
+            __threadfence();
+
+         }
+
+         my_tile.sync();
+
+         unlock_primary(my_tile, primary_bucket);
+
+         return true;
+
+      }
+
+
        __device__ bool upsert_generic(const tile_type & my_tile, const Key & key, const Val & val){
+
+
+         __shared__ vector_type data_vectors[64];
 
          // uint64_t bucket_0 = hash(&key, sizeof(Key), seed) % n_buckets_primary;
          
@@ -831,101 +1187,280 @@ namespace tables {
 
          //unlock_primary(my_tile, bucket_0);
 
+         //if (replace_reference(my_tile, key, val)) return true;
+
+
+
+         uint64_t bucket_0 = get_current_bucket(key, 0);
+
+         uint64_t bucket_1 = get_current_bucket(key, 1);
+         uint64_t bucket_2 = get_current_bucket(key, 2);
+
+         // if (my_tile.thread_rank() == 0){
+         //    lock_key_buckets(bucket_0, bucket_1, bucket_2);
+         // }
+         // my_tile.sync();
+
+
+         stall_lock_primary(my_tile, bucket_0);
+
+
+
+         //bool upserted = false;
+         bool upserted = upsert_primary_buckets(my_tile, key, val, bucket_0, bucket_1, bucket_2);
+
+
+         unlock_primary(my_tile, bucket_0);
+
+
+         // if (my_tile.thread_rank() == 0){
+         //    unlock_key_buckets(bucket_0, bucket_1, bucket_2);
+         // }
+         // my_tile.sync();
+
+         if (upserted) return true;
+
+
+         //return false;
+
 
          int n_iters = 0;
 
-         vector_type my_vector;
-         vector_type sorted_hashes;
+         vector_type * my_vector = &data_vectors[my_tile.meta_group_rank()];
 
          if (my_tile.thread_rank() == 0){
-            my_vector.init(CUCKOO_MAX_PROBES+1);
-            sorted_hashes.init(CUCKOO_MAX_PROBES+1);
+
+            my_vector->reset({0,0,0});
          }
 
 
-         while (true){
+         my_tile.sync();
 
+
+         int n_tries = 0;
+
+
+         while (n_tries < MAX_CUCKOO_ATTEMPTS){
 
 
             //else, unlock and generate
 
+            //bool success = false;
+
             if (!generate_path(my_tile, key, my_vector)){
                //too full!
+               n_tries++;
 
                if (my_tile.thread_rank() == 0){
-                  my_vector.free_vector();
-                  sorted_hashes.free_vector();
+
+                  my_vector->reset({0,0,0});
+
                }
-               return false;
+               __threadfence();
+
+               my_tile.sync();
+               continue;
             }
 
 
-            verify_path(my_tile, my_vector);
-
-
-
-            //sort
-            sort_locks(my_tile, my_vector, sorted_hashes);
-
-            //if (my_tile.thread_rank() == 0) printf("Locks sorted\n");
-
-            if (my_tile.thread_rank() == 0){
-
-               if (sorted_hashes.size >= 2){
-                  if (sorted_hashes[0].hash >= sorted_hashes[1].hash){
-                     printf("Bad sort\n");
-                  }
-               }
-
-               for (uint64_t i = 0; i < sorted_hashes.size; i++){
-                  stall_lock_one_thread_primary(sorted_hashes[i].hash);
-               }
-
-            }
+            //verify_path(my_tile, my_vector);
 
             my_tile.sync();
 
-            bool return_val = upsert_generic_nolock(my_tile, key, val, my_vector);
+            bool return_val = upsert_generic_internal(my_tile, key, val, my_vector);
+
+            my_tile.sync();
+
+
+            // if (my_tile.thread_rank() == 0){
+
+            //    for (uint64_t i=(sorted_hashes->size-1); i > 0; i--){
+            //       unlock_bucket_one_thread_primary((*sorted_hashes)[i].hash);
+            //    }
+
+            //    unlock_bucket_one_thread_primary((*sorted_hashes)[0].hash);
+
+            // }
+
 
             my_tile.sync();
 
 
             if (my_tile.thread_rank() == 0){
 
-               for (uint64_t i=0; i < sorted_hashes.size; i++){
-                  unlock_bucket_one_thread_primary(sorted_hashes[i].hash);
-               }
+               my_vector->reset({0,0,0});
 
             }
 
 
-
-            if (my_tile.thread_rank() == 0){
-
-               sorted_hashes.size = 0;
-               my_vector.size = 0;
-
-               if (return_val){
-                  sorted_hashes.free_vector();
-                  my_vector.free_vector();
-               }
-            }
 
             my_tile.sync();
 
             if (return_val){
 
+               #if DEBUG_PRINTS
+               printf("Exiting success\n");
+               #endif
+
                return true;
             } 
 
-            printf("Looping\n");
+            //printf("Looping\n");
+            #if DEBUG_PRINTS
+            printf("Exiting failure\n");
+            #endif
+
+
+            n_tries++;
+
+            if (n_tries >= MAX_CUCKOO_ATTEMPTS){
+
+               //if (my_tile.thread_rank() == 0) printf("Exceeded max cuckoo depth\n");
+               return false;
+            }
+
+            __threadfence();
 
          }
 
 
        }
 
-       __device__ vector_type sort_locks(const tile_type & my_tile, vector_type & lock_vector, vector_type & sort_vector){
+      //primary buckets are already locked, try buckets in order
+       //if any space exists done.
+      __device__ bool upsert_primary_buckets(const tile_type & my_tile, const Key & key, const Val & val, uint64_t bucket_0, uint64_t bucket_1, uint64_t bucket_2){
+
+
+
+
+         bucket_type * bucket_0_ptr = get_bucket_ptr_primary(bucket_0);
+
+
+         uint bucket_0_empty;
+         uint bucket_0_tombstone;
+         uint bucket_0_match;
+
+         bucket_0_ptr->load_fill_ballots(my_tile, key, bucket_0_empty, bucket_0_tombstone, bucket_0_match);
+
+         if (bucket_0_ptr->upsert_existing(my_tile, key, val, bucket_0_match) != -1) return true;
+
+         if (__popc(bucket_0_empty) != 0){
+
+            if (bucket_0_ptr->insert_ballots(my_tile, key, val, bucket_0_empty, bucket_0_tombstone)) return true;
+
+         }
+
+         //if popc(bucket_empty) try pure insert on empty - implies not inserted yet.
+         //this should go in load fill ballots.
+
+         uint bucket_1_empty;
+         uint bucket_1_tombstone;
+         uint bucket_1_match;
+
+         bucket_type * bucket_1_ptr = get_bucket_ptr_primary(bucket_1);
+
+         bucket_1_ptr->load_fill_ballots(my_tile, key, bucket_1_empty, bucket_1_tombstone, bucket_1_match);
+
+         if (bucket_1_ptr->upsert_existing(my_tile, key, val, bucket_1_match) != -1) return true;
+
+         if (__popc(bucket_1_empty) != 0){
+
+            if (bucket_1_ptr->insert_ballots(my_tile, key, val, bucket_1_empty, bucket_1_tombstone)) return true;
+
+         }
+
+
+         uint bucket_2_empty;
+         uint bucket_2_tombstone;
+         uint bucket_2_match;
+
+         bucket_type * bucket_2_ptr = get_bucket_ptr_primary(bucket_2);
+
+         bucket_2_ptr->load_fill_ballots(my_tile, key, bucket_2_empty, bucket_2_tombstone, bucket_2_match);
+
+         if (bucket_2_ptr->upsert_existing(my_tile, key, val, bucket_2_match) != -1) return true;
+
+         if (__popc(bucket_2_empty) != 0){
+
+            if (bucket_2_ptr->insert_ballots(my_tile, key, val, bucket_2_empty, bucket_2_tombstone)) return true;
+
+         }
+
+
+         if (bucket_0_ptr->insert_ballots(my_tile, key, val, bucket_0_empty, bucket_0_tombstone)) return true;
+
+         if (bucket_1_ptr->insert_ballots(my_tile, key, val, bucket_1_empty, bucket_1_tombstone)) return true;
+
+         if (bucket_2_ptr->insert_ballots(my_tile, key, val, bucket_2_empty, bucket_2_tombstone)) return true;
+
+         return false;
+
+      }
+
+       // __device__ void release_vector(const tile_type & my_tile, vector_type & sort_vector){
+
+       //   if (my_tile.thread_rank() == 0){
+       //      sort_vector.free_vector();
+       //   }
+
+       //   my_tile.sync();
+       // }
+
+      __device__ void acquire_locks(const tile_type & my_tile, vector_type & sorted_hashes){
+
+         if (my_tile.thread_rank() == 0){
+
+
+               for (uint64_t i = 0; i < sorted_hashes.size; i++){
+                  stall_lock_one_thread_primary(sorted_hashes[i].hash);
+               }
+
+
+               printf("All locks acquired\n");
+
+         }
+
+
+         my_tile.sync();
+
+
+       }
+
+
+      __device__ void verify_sort(const tile_type & my_tile, vector_type * sorted_hashes){
+
+         if (my_tile.thread_rank() == 0){
+
+
+               for (uint64_t i = 1; i < sorted_hashes->size; i++){
+
+                  if ((*sorted_hashes)[i-1].hash >= (*sorted_hashes)[i].hash) printf("Bad sort\n");
+               }
+
+         }
+
+         my_tile.sync();
+
+
+       }
+
+      __device__ void release_locks(const tile_type & my_tile, vector_type & sorted_hashes){
+
+         if (my_tile.thread_rank() == 0){
+
+
+               for (uint64_t i = 0; i < sorted_hashes.size; i++){
+                  unlock_bucket_one_thread_primary(sorted_hashes[i].hash);
+               }
+
+         }
+
+         my_tile.sync();
+
+
+       }
+
+       __device__ void sort_locks(const tile_type & my_tile, vector_type * lock_vector, vector_type * sort_vector){
 
 
          // if (lock_vector.size >= 2){
@@ -941,19 +1476,19 @@ namespace tables {
             uint64_t hash_min = ~0ULL;
             Key min_key;
 
-            for (int i = 0; i < lock_vector.size; i++){
+            for (int i = 0; i < lock_vector->size; i++){
 
                //calculate min.
-               if (lock_vector[i].hash < hash_min){
-                  hash_min = lock_vector[i].hash;
-                  min_key = lock_vector[i].key;
+               if ((*lock_vector)[i].hash < hash_min){
+                  hash_min = (*lock_vector)[i].hash;
+                  min_key = (*lock_vector)[i].key;
                } 
 
 
             }
 
 
-            sort_vector.push_back({hash_min, min_key});
+            sort_vector->push_back({hash_min, min_key});
 
             //uint64_t smallest_current_hash = 0;
 
@@ -961,11 +1496,11 @@ namespace tables {
 
                uint64_t smallest_current_hash = ~0ULL;
 
-               for (int i = 0; i < lock_vector.size; i++){
+               for (int i = 0; i < lock_vector->size; i++){
 
-                  if (lock_vector[i].hash > hash_min && lock_vector[i].hash < smallest_current_hash){
-                     smallest_current_hash = lock_vector[i].hash;
-                     min_key = lock_vector[i].key;
+                  if ((*lock_vector)[i].hash > hash_min && (*lock_vector)[i].hash < smallest_current_hash){
+                     smallest_current_hash = (*lock_vector)[i].hash;
+                     min_key = (*lock_vector)[i].key;
 
                   }
 
@@ -975,11 +1510,15 @@ namespace tables {
 
                if (smallest_current_hash == ~0ULL) break;
 
+               if (hash_min >= smallest_current_hash){
+                  printf("Bad hash sort\n");
+               }
+
                hash_min = smallest_current_hash;
 
-               sort_vector.push_back({hash_min, min_key});
+               sort_vector->push_back({hash_min, min_key});
 
-               printf("Looping in lock sort, smallest is %lx\n", hash_min);
+               //printf("Looping in lock sort, smallest is %lx\n", hash_min);
                
 
 
@@ -989,7 +1528,7 @@ namespace tables {
 
 
          //acquire locks.  
-         return sort_vector;
+         //return sort_vector;
 
        }
 
@@ -1015,7 +1554,7 @@ namespace tables {
 
          Key working_key = key;
 
-         bucket_id = bucket_id+1 % N_CUCKOO_HASHES;
+         bucket_id = (bucket_id+1) % N_CUCKOO_HASHES;
 
          return hash(&working_key, sizeof(Key), seed + bucket_id) % n_buckets_primary;
       }
@@ -1024,7 +1563,7 @@ namespace tables {
 
          Key working_key = key;
 
-         //bucket_id = bucket_id+1 % N_CUCKOO_HASHES;
+         bucket_id = bucket_id % N_CUCKOO_HASHES;
 
          return hash(&working_key, sizeof(Key), seed + bucket_id) % n_buckets_primary;
        }
@@ -1038,11 +1577,13 @@ namespace tables {
 
             uint64_t ith_hash = hash(&working_key, sizeof(Key), seed+i) % n_buckets_primary;
 
-            if (ith_hash == current_bucket_hash) return i % N_CUCKOO_HASHES;
+            if (ith_hash == current_bucket_hash) return i;
 
          }
 
          //asm volatile("trap;");
+
+         //printf("Failed to generate get_bucket_id_from_hash\n");
 
          return -1;
 
@@ -1086,17 +1627,24 @@ namespace tables {
       }
 
        //does not contain the last item (tombstone)
-       __device__ bool generate_path(const tile_type & my_tile, const Key & key, vector_type & item_vector){
+       __device__ bool generate_path(const tile_type & my_tile, const Key & key, vector_type * item_vector){
 
          Key working_key = key;
          //setting it to this value wraps get_next to 0.
-         int current_bucket_id = 0;
+         int current_bucket_id = 2;
 
-         uint64_t next_bucket = get_next_bucket(working_key, current_bucket_id);
+         // uint64_t next_bucket = get_current_bucket(working_key, current_bucket_id);
 
-         if (my_tile.thread_rank() == 0){
-            item_vector.push_back({next_bucket, working_key, current_bucket_id});
-         }
+         // uint64_t final_query_bucket = get_current_bucket(working_key, 2);
+
+         // if (my_tile.thread_rank() == 0){
+
+         //    item_vector->push_back({final_query_bucket, working_key, 2});
+
+
+         //    item_vector->push_back({next_bucket, working_key, current_bucket_id});
+
+         // }
 
          //acts as exiting while loop
          for (int i =0; i < CUCKOO_MAX_PROBES; i++){
@@ -1104,7 +1652,7 @@ namespace tables {
 
             //uint64_t current_bucket = get_current_bucket(working_key, current_bucket_id);
 
-            next_bucket = get_next_bucket(working_key, current_bucket_id);
+            uint64_t next_bucket = get_next_bucket(working_key, current_bucket_id);
 
             //bucket_type * bucket_primary_ptr = get_bucket_ptr_primary(current_bucket);
 
@@ -1113,6 +1661,8 @@ namespace tables {
             uint primary_empty;
             uint primary_tombstone;
             uint primary_match;
+
+            //ADD_PROBE_ADJUSTED
 
             //load
             next_bucket_ptr->load_fill_ballots(my_tile, key, primary_empty, primary_tombstone, primary_match);
@@ -1149,70 +1699,55 @@ namespace tables {
 
             current_bucket_id = get_bucket_id_from_hash(working_key, next_bucket);
 
+            if (working_key == tombstoneKey || working_key == defaultKey) return true;
+
             //hash = get_current_bucket(working_key, 0);
 
-            if (current_bucket_id == -1 && my_tile.thread_rank() == 0){
-               printf("Failed movement for key %llu\n", working_key);
+            // if (current_bucket_id == -1 && my_tile.thread_rank() == 0){
+            //    printf("Failed movement for key %llu\n", working_key);
 
-               return false;
-            }
+            //    return false;
+            // }
 
             if (my_tile.thread_rank() == 0){
-                item_vector.push_back({next_bucket, working_key, current_bucket_id});
+                item_vector->push_back({next_bucket, working_key, current_bucket_id});
             }
 
 
 
          }
 
+         //printf("Exceeded max depth!\n");
+
          return false;
 
        }
 
+      //start by booting all keys, then circle back and see if there is a replacement we can do once our lock is acquired.
+      __device__ bool upsert_generic_internal(const tile_type & my_tile, const Key & key, const Val & val, vector_type * order_vector){
 
-      __device__ bool upsert_generic_nolock(const tile_type & my_tile, const Key & key, const Val & val, vector_type & order_vector){
 
 
-         uint64_t size = my_tile.shfl(order_vector.size,0);
+         uint64_t size = my_tile.shfl(order_vector->size,0);
 
          //ignore current.
-         for (int i = size-1; i>0; i++){
+         for (int i = size-1; i>=0; i--){
             //shuffle data
 
-            Key current_key;
-            int current_bucket_id;
-            if (my_tile.thread_rank() == 0){
-               current_key = order_vector[i].key;
-               current_bucket_id = order_vector[i].bucket_id;
-            } 
+            Key current_key = (*order_vector)[i].key;
+            int current_bucket_id = (*order_vector)[i].bucket_id;
 
-            current_key = my_tile.shfl(current_key, 0);
-            current_bucket_id = my_tile.shfl(current_bucket_id, 0);
+            // if (my_tile.thread_rank() == 0){
+            //    current_key = (*order_vector)[i].key;
+            //    current_bucket_id = (*order_vector)[i].bucket_id;
+            // } 
 
+            // current_key = my_tile.shfl(current_key, 0);
+            // current_bucket_id = my_tile.shfl(current_bucket_id, 0);
 
-            uint64_t current_bucket = get_current_bucket(current_key, current_bucket_id);
-
-            bucket_type * current_bucket_ptr = get_bucket_ptr_primary(current_bucket);
-
-            uint64_t next_bucket = get_next_bucket(current_key, current_bucket_id);
-
-            bucket_type * next_bucket_ptr = get_bucket_ptr_primary(next_bucket);
-
-            Val stored_val;
-
-
-            //update interrupted - other thread moved my key.
-            if (!current_bucket_ptr->query(my_tile, current_key, stored_val)){
+            if (!boot_key_next(my_tile, current_key, current_bucket_id)){
                return false;
             }
-
-            if (!next_bucket_ptr->insert(my_tile, current_key, stored_val)){
-               //no harm no foul - insert failed.
-               return false;
-            }
-
-            current_bucket_ptr->erase(my_tile, current_key);
-            
 
 
          }
@@ -1222,10 +1757,29 @@ namespace tables {
 
          bucket_type * current_bucket_ptr = get_bucket_ptr_primary(current_bucket);
 
-         current_bucket_ptr->insert(my_tile, key, val);
+
+         stall_lock_primary(my_tile, current_bucket);
+
+         if (replace_reference(my_tile, key, val)){
+
+            unlock_primary(my_tile, current_bucket);
+            return true;
+         }
+
+
+         
+         uint bucket_empty;
+         uint bucket_tombstone;
+         uint bucket_match;
+
+         current_bucket_ptr->load_fill_ballots(my_tile, key, bucket_empty, bucket_tombstone, bucket_match);
+
+         bool inserted = current_bucket_ptr->insert_ballots(my_tile, key, val, bucket_empty, bucket_tombstone);
+
+         unlock_primary(my_tile, current_bucket);
 
          //Done!
-         return true;
+         return inserted;
 
       }
 
@@ -1299,64 +1853,83 @@ namespace tables {
 
       __device__ packed_pair_type * query_packed_reference(tile_type my_tile, Key key){
 
+         for (int i = 0; i < N_CUCKOO_HASHES; i++){
+            uint64_t bucket = get_current_bucket(key, i);
+
+            bucket_type * bucket_ptr = get_bucket_ptr_primary(bucket);
+      
+            //uint bucket_empty;
+            //uint bucket_tombstone;
+            uint bucket_match;
+
+
+
+
+            bucket_ptr->load_fill_ballots_match(my_tile, key, bucket_match);
+
+
+            packed_pair_type * val_loc = bucket_ptr->query_pair_ballot(my_tile, bucket_match);
+
+            if (val_loc != nullptr) return val_loc;
+
+
+         }
+
          return nullptr;
 
-         // uint64_t bucket_primary = hash(&key, sizeof(Key), seed) % n_buckets_primary;
+
+      }
 
 
-         // bucket_type * bucket_primary_ptr = get_bucket_ptr_primary(bucket_primary);
-
-         // uint primary_empty;
-         // uint primary_tombstone;
-         // uint primary_match;
-
-         // bucket_primary_ptr->load_fill_ballots(my_tile, key, primary_empty, primary_tombstone, primary_match);
-
-         // packed_pair_type * val_loc = bucket_primary_ptr->query_pair_ballot(my_tile, primary_match);
-
-         // if (val_loc != nullptr) return val_loc;
-
-         // //shortcutting
-         // if (__popc(primary_empty) > 0) return nullptr;
+      __device__ bool replace_reference(tile_type my_tile, Key key, Val val){
 
 
-         // uint64_t primary_step = hash(&key, sizeof(Key), seed+1);
-         // uint64_t alternate_step = hash(&key, sizeof(Key), seed+2);
+         // for (int i = 0; i < N_CUCKOO_HASHES; i++){
 
-         // //setup for alterna
+         //    uint64_t current_bucket = get_current_bucket(key, i);
 
-
-         // for (int i = 0; i < CUCKOO_MAX_PROBES; i++){
-
-
-         //    uint64_t bucket_index = (primary_step + alternate_step*i) % n_buckets_alt;
-         //    bucket_type * bucket_ptr = get_bucket_ptr_alt(bucket_index);
-      
-         //    uint bucket_empty;
-         //    uint bucket_tombstone;
-         //    uint bucket_match;
-
-
-         //    bucket_ptr->load_fill_ballots(my_tile, key, bucket_empty, bucket_tombstone, bucket_match);
-
-         //    val_loc = bucket_primary_ptr->query_pair_ballot(my_tile, primary_match);
-
-         //    if (val_loc != nullptr) return val_loc;
-
-         //    //shortcutting
-         //    if (__popc(primary_empty) > 0) return nullptr;
+         //    stall_lock_primary(current_bucket);
 
 
          // }
 
 
-         // return nullptr;
+         packed_pair_type * found_pair = query_packed_reference(my_tile, key);
 
 
+         if (found_pair == nullptr){
+
+            return false;
+
+
+         }
+
+         gallatin::utils::st_rel(&found_pair->val, val);
+
+         return true;
+
+
+      }
+
+
+      __device__ bool query_internal(tile_type my_tile, Key key, Val & val, uint64_t bucket_0, uint64_t bucket_1, uint64_t bucket_2){
+
+
+         bucket_type * bucket_0_ptr = get_bucket_ptr_primary(bucket_0);
+         bucket_type * bucket_1_ptr = get_bucket_ptr_primary(bucket_1);
+         bucket_type * bucket_2_ptr = get_bucket_ptr_primary(bucket_2);
+
+         if (bucket_0_ptr->query(my_tile, key, val)) return true;
+         if (bucket_1_ptr->query(my_tile, key, val)) return true;
+         if (bucket_2_ptr->query(my_tile, key, val)) return true;
+
+
+         return false;
 
 
 
       }
+
 
       // //nope! no storage
       __device__ bool find_with_reference(tile_type my_tile, Key key, Val & val){
@@ -1371,6 +1944,46 @@ namespace tables {
 
          // }
 
+         uint64_t bucket_0 = get_current_bucket(key, 0);
+         uint64_t bucket_1 = get_current_bucket(key, 1);
+         uint64_t bucket_2 = get_current_bucket(key, 2);
+
+         // if (my_tile.thread_rank() == 0){
+         //    lock_key_buckets(bucket_0, bucket_1, bucket_2);
+         // }
+         // my_tile.sync();
+
+         stall_lock_primary(my_tile, bucket_0);
+
+         bool found = query_internal(my_tile, key, val, bucket_0, bucket_1, bucket_2);
+
+         // if (my_tile.thread_rank() == 0){
+         //    unlock_key_buckets(bucket_0, bucket_1, bucket_2);
+         // }
+         // my_tile.sync();
+
+         unlock_primary(my_tile, bucket_0);
+
+         return found;
+
+
+
+
+
+      }
+
+
+      __device__ bool find_with_reference_no_lock(tile_type my_tile, Key key, Val & val){
+
+
+         // for (int i = 0; i < N_CUCKOO_HASHES; i++){
+
+         //    uint64_t current_bucket = get_current_bucket(key, i);
+
+         //    stall_lock_primary(current_bucket);
+
+
+         // }
 
          for (int i = 0; i < N_CUCKOO_HASHES; i++){
 
@@ -1379,7 +1992,11 @@ namespace tables {
             bucket_type * current_bucket_ptr = get_bucket_ptr_primary(current_bucket);
 
 
-            if (current_bucket_ptr->query(my_tile, key, val)) return true;
+            if (current_bucket_ptr->query(my_tile, key, val)){
+
+            
+               return true;
+            }
 
 
          }
@@ -1391,39 +2008,62 @@ namespace tables {
 
       __device__ bool remove(tile_type my_tile, Key key){
 
-         while (true){
+
+         uint64_t bucket_0 = get_current_bucket(key, 0);
+         uint64_t bucket_1 = get_current_bucket(key, 1);
+         uint64_t bucket_2 = get_current_bucket(key, 2);
+
+         // if (my_tile.thread_rank() == 0){
+         //    lock_key_buckets(bucket_0, bucket_1, bucket_2);
+         // }
+         // my_tile.sync();
+
+         stall_lock_primary(my_tile, bucket_0);
 
 
 
-            packed_pair_type * found_pair = query_packed_reference(my_tile, key);
+         packed_pair_type * found_pair = query_packed_reference(my_tile, key);
 
-            if (found_pair == nullptr) return false;
+         if (found_pair == nullptr){
 
-            bool ballot = false;
-            //erase
-            if (my_tile.thread_rank() == 0){
+            unlock_primary(my_tile, bucket_0);
+            return false;
+         }
 
+         bool ballot = false;
 
-               ballot = typed_atomic_write(&found_pair->key, key, tombstoneKey);
-               if (ballot){
+         //erase
+         if (my_tile.thread_rank() == 0){
 
-                  //force store
-                  gallatin::utils::st_rel(&found_pair->val, tombstoneVal);
-                  //typed_atomic_exchange(&slots[i].val, ext_val);
-               }
+            ADD_PROBE
+            ballot = typed_atomic_write(&found_pair->key, key, tombstoneKey);
+            //if (ballot){
 
-            }
-
-           
-            bool result = my_tile.ballot(ballot);
-            if (result) return true;
-
-            __threadfence();
-
-            printf("Looping in remove\n");
-
+               //force store
+               //gallatin::utils::st_rel(&found_pair->val, tombstoneVal);
+               //typed_atomic_exchange(&slots[i].val, ext_val);
+            //}
 
          }
+
+         __threadfence();
+
+        
+         bool result = my_tile.ballot(ballot);
+         if (result){
+            
+            unlock_primary(my_tile, bucket_0);
+
+            return true;
+         }
+
+
+         //printf("Looping in remove\n");
+
+         unlock_primary(my_tile, bucket_0);
+
+         return false;
+
 
 
 

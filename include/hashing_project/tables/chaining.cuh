@@ -47,25 +47,18 @@ namespace tables {
 
    }
 
-   template <typename Key, typename Val>
-   struct chain_pair{
-      Key key;
-      Val val;
-   };
-
-
    // template <typename Key, typename Val>
-   // __device__ chain_pair<Key, Val> load_chain_packed_pair(chain_pair<Key, Val> * pair_to_load){
+   // __device__ ht_pair<Key, Val> load_chain_packed_pair(ht_pair<Key, Val> * pair_to_load){
    //    asm volatile ("trap;");
    // }
 
 
    // template<>
-   // __device__ chain_pair<uint32_t, uint32_t> load_chain_packed_pair(chain_pair<uint32_t, uint32_t> * pair_to_load){
+   // __device__ ht_pair<uint32_t, uint32_t> load_chain_packed_pair(ht_pair<uint32_t, uint32_t> * pair_to_load){
 
    //       //load 8 tags and pack them
 
-   //          chain_pair<uint32_t,uint32_t> loaded_pair;
+   //          ht_pair<uint32_t,uint32_t> loaded_pair;
 
    //          asm volatile("ld.gpu.acquire.v2.u32 {%0,%1}, [%2];" : "=r"(loaded_pair.key), "=r"(loaded_pair.val) : "l"(&pair_to_load));
             
@@ -75,11 +68,11 @@ namespace tables {
    // }
 
    // template<>
-   // __device__ chain_pair<uint64_t, uint64_t> load_chain_packed_pair(chain_pair<uint64_t, uint64_t> * pair_to_load){
+   // __device__ ht_pair<uint64_t, uint64_t> load_chain_packed_pair(ht_pair<uint64_t, uint64_t> * pair_to_load){
 
    //       //load 8 tags and pack them
 
-   //       chain_pair<uint64_t,uint64_t> loaded_pair;
+   //       ht_pair<uint64_t,uint64_t> loaded_pair;
 
    //       asm volatile("ld.gpu.acquire.v2.u64 {%0,%1}, [%2];" : "=l"(loaded_pair.key), "=l"(loaded_pair.val) : "l"(&pair_to_load));
          
@@ -140,7 +133,7 @@ namespace tables {
 
 
 
-      using pair_type = chain_pair<Key, Val>;
+      using pair_type = ht_pair<Key, Val>;
 
       using my_type = coop_chaining_block<Key, defaultKey, tombstoneKey, Val, defaultVal, tombstoneVal, partition_size, bucket_size>;
       //using my_type = coop_chaining_block<Key, Val, size, partition_size>;
@@ -188,7 +181,7 @@ namespace tables {
 
             // return loaded_pair;
 
-            return ht_load_packed_pair<pair_type, Key, Val>(&slots[index]);
+            return ht_load_packed_pair<ht_pair, Key, Val>(&slots[index]);
 
             // asm volatile("ld.gpu.acquire.v2.u64 {%0,%1}, [%2];" : "=l"(loaded_pair.key), "=l"(loaded_pair.val) : "l"(&slots[index]));
             
@@ -743,7 +736,7 @@ namespace tables {
 
       uint64_t * locks;
 
-      using packed_pair_type = chain_pair<Key, Val>;
+      using packed_pair_type = ht_pair<Key, Val>;
 
 
       static __host__ my_type * generate_on_device(uint64_t ext_nslots, uint64_t ext_seed){
@@ -1221,6 +1214,76 @@ namespace tables {
 
       }
 
+      __device__ bool upsert_function(const tile_type & my_tile, const Key & key, const Val & val, void (*replace_func)(packed_pair_type *, Key, Val)){
+
+         uint64_t bucket_0 = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
+
+         stall_lock(my_tile, bucket_0);
+
+
+         //query
+
+         //Val * stored_val = query_reference(tile_type my_tile, Key key){
+
+         packed_pair_type * stored_copy = query_packed_reference(my_tile, key, bucket_0);
+
+         if (stored_copy != nullptr){
+
+            //upsert
+            
+            replace_func(stored_copy, key, val);
+
+            unlock(my_tile, bucket_0);
+            return true;
+
+         }
+
+
+
+         bool return_val = upsert_generic_internal(my_tile, key, val);
+
+         unlock(my_tile, bucket_0);
+
+         return true;
+
+
+      }
+
+      __device__ bool upsert_function_no_lock(const tile_type & my_tile, const Key & key, const Val & val, void (*replace_func)(packed_pair_type *, Key, Val)){
+
+         uint64_t bucket_0 = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
+
+         //stall_lock(my_tile, bucket_0);
+
+
+         //query
+
+         //Val * stored_val = query_reference(tile_type my_tile, Key key){
+
+         packed_pair_type * stored_copy = query_packed_reference(my_tile, key, bucket_0);
+
+         if (stored_copy != nullptr){
+
+            //upsert
+            
+            replace_func(stored_copy, key, val);
+
+            //unlock(my_tile, bucket_0);
+            return true;
+
+         }
+
+
+
+         bool return_val = upsert_generic_internal(my_tile, key, val);
+
+         //unlock(my_tile, bucket_0);
+
+         return true;
+
+
+      }
+
       __device__ packed_pair_type * query_packed_reference(cg::thread_block_tile<partition_size> my_tile, Key queryKey, uint64_t my_slot){
 
 
@@ -1251,6 +1314,44 @@ namespace tables {
 
 
          return nullptr;
+
+
+      }
+
+
+      __device__ packed_pair_type * find_pair(const tile_type & my_tile, const Key & key){
+
+         uint64_t bucket_0 = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
+
+         stall_lock(my_tile, bucket_0);
+
+
+         //query
+
+         //Val * stored_val = query_reference(tile_type my_tile, Key key){
+
+         packed_pair_type * stored_copy = query_packed_reference(my_tile, key, bucket_0);
+
+
+         unlock(my_tile, bucket_0);
+         
+         return stored_copy;
+
+
+      }
+
+      __device__ packed_pair_type * find_pair_no_lock(const tile_type & my_tile, const Key & key){
+
+         uint64_t bucket_0 = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
+
+         //query
+
+         //Val * stored_val = query_reference(tile_type my_tile, Key key){
+
+         packed_pair_type * stored_copy = query_packed_reference(my_tile, key, bucket_0);
+
+         
+         return stored_copy;
 
 
       }
@@ -1311,7 +1412,8 @@ namespace tables {
 
       // }
 
-      __device__ bool find_with_reference(cg::thread_block_tile<partition_size> my_tile, Key queryKey, Val & returnVal){
+      //added nodiscard - lookups should always have the return value checked.
+      [[nodiscard]] __device__ bool find_with_reference(cg::thread_block_tile<partition_size> my_tile, Key queryKey, Val & returnVal){
 
          uint64_t my_slot = gallatin::hashers::MurmurHash64A(&queryKey, sizeof(Key), seed) % nblocks;
 
@@ -1339,7 +1441,7 @@ namespace tables {
 
       }
 
-      __device__ bool find_with_reference_no_lock(cg::thread_block_tile<partition_size> my_tile, Key queryKey, Val & returnVal){
+      [[nodiscard]] __device__ bool find_with_reference_no_lock(cg::thread_block_tile<partition_size> my_tile, Key queryKey, Val & returnVal){
 
          uint64_t my_slot = gallatin::hashers::MurmurHash64A(&queryKey, sizeof(Key), seed) % nblocks;
 
@@ -1451,6 +1553,7 @@ namespace tables {
 
       __host__ void print_chain_stats(){
 
+
          my_type * host_version = gallatin::utils::copy_to_host<my_type>(this);
 
          uint64_t nblocks = host_version->nblocks;
@@ -1507,6 +1610,10 @@ namespace tables {
 
          printf("chaining_hashing using %llu bytes\n", capacity);
 
+      }
+
+      __host__ void print_fill(){
+         printf("Not yet implemented\n");
       }
 
    };

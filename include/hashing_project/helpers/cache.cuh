@@ -13,6 +13,10 @@
 //#include <hashing_project/helpers/fifo_queue.cuh>
 #include <hashing_project/helpers/fifo_queue_wrap.cuh>
 
+#include <hashing_project/helpers/ht_pairs.cuh>
+#include<hashing_project/helpers/cache_counters.cuh>
+#include <hashing_project/helpers/cache_cycle_counters.cuh>
+
 #include "assert.h"
 #include "stdio.h"
 
@@ -29,6 +33,14 @@ namespace cg = cooperative_groups;
 
 // a pointer list managing a set section of device memory
 
+//disabled unless specifically enabled.
+#ifndef COUNT_CACHE_OPS
+#define COUNT_CACHE_OPS 0
+#endif
+
+#ifndef COUNT_CACHE_CYCLES
+#define COUNT_CACHE_CYCLES 0
+#endif
 
 
 //cache protocol
@@ -95,6 +107,16 @@ __global__ void compare_cache_arrays(cache * dev_cache, uint64_t * dev_array, ui
 
 
 namespace hashing_project {
+
+
+  //an override for upsertion - do not replace if in cache.
+   __device__ void drop_if_exists(hashing_project::tables::ht_pair<uint64_t, uint64_t> * location, uint64_t key, uint64_t val){
+
+    //atomicAdd((unsigned long long int *)&location->val, (unsigned long long int) val);
+    return;
+
+   }
+
 
    template <template<typename, typename, uint, uint> typename hash_table_type, uint tile_size, uint bucket_size>
    struct ht_fifo_cache {
@@ -219,35 +241,59 @@ namespace hashing_project {
 
         uint64_t val = 0;
 
-        if (map->find_with_reference_no_lock(my_tile, replace_index, val)){
+        //always try the remove
+        // if (map->find_with_reference_no_lock(my_tile, replace_index, val)){
 
-          //write back.
+        //   ADD_QUERY
 
-          //this can fail if 2+ threads have enqueued?
+        //   //write back.
 
-          map->remove_no_lock(my_tile, replace_index);
-        }
+        //   //this can fail if 2+ threads have enqueued?
 
+        //   map->remove_no_lock(my_tile, replace_index);
+
+        //   ADD_REMOVE
+
+        // } else {
+        //   ADD_QUERY_NEGATIVE
+        // }
+
+        ADD_REMOVE
+        map->remove_no_lock(my_tile, replace_index);
 
         //never double insert.
 
-        if (map->find_with_reference_no_lock(my_tile, primary_index, val)){
+        
+        //query not necessary - new upsert does it all.
+        // if (map->find_with_reference_no_lock(my_tile, primary_index, val)){
 
-          unlock_indices(my_tile, primary_index_bucket, replace_index_bucket);
+        //   ADD_QUERY
 
-          return val;
+        //   unlock_indices(my_tile, primary_index_bucket, replace_index_bucket);
 
-        }
+        //   return val;
+
+        // }
+
+        // ADD_QUERY_NEGATIVE
+
+        START_HOST_READ_THROUGHPUT
 
 
         if (my_tile.thread_rank() == 0){
 
+          __threadfence();
           val = gallatin::utils::ld_acq(&host_items[primary_index]);
+          //val = 0;
 
         }
         val = my_tile.shfl(val, 0);
 
-        map->upsert_no_lock(my_tile, primary_index, val);
+        END_HOST_READ_THROUGHPUT
+
+        ADD_INSERT
+
+        map->upsert_function_no_lock(my_tile, primary_index, val, &drop_if_exists);
 
         unlock_indices(my_tile, primary_index_bucket, replace_index_bucket);
 
@@ -257,31 +303,42 @@ namespace hashing_project {
 
       __device__ uint64_t replace_empty(cg::thread_block_tile<tile_size> my_tile, uint64_t primary_index, uint64_t primary_index_bucket){
 
-        map->stall_lock(my_tile, primary_index_bucket);
+        
 
         uint64_t val = 0;
 
         //never double insert.
 
-        if (map->find_with_reference_no_lock(my_tile, primary_index, val)){
+        // if (map->find_with_reference_no_lock(my_tile, primary_index, val)){
 
-          map->unlock(my_tile, primary_index_bucket);
+        //   ADD_QUERY
 
-          return val;
+        //   map->unlock(my_tile, primary_index_bucket);
 
-        }
+        //   return val;
 
+        // }
+
+        // ADD_QUERY_NEGATIVE
+
+        START_HOST_READ_THROUGHPUT
 
         if (my_tile.thread_rank() == 0){
 
+          __threadfence();
           val = gallatin::utils::ld_acq(&host_items[primary_index]);
+          //val = 0;
 
         }
         val = my_tile.shfl(val, 0);
 
-        map->upsert_no_lock(my_tile, primary_index, val);
+        END_HOST_READ_THROUGHPUT
 
-        map->unlock(my_tile, primary_index_bucket);
+        ADD_INSERT_EMPTY
+
+        map->upsert_function(my_tile, primary_index, val, &drop_if_exists);
+
+        //map->unlock(my_tile, primary_index_bucket);
 
         return val;
 
@@ -302,8 +359,10 @@ namespace hashing_project {
 
       }
       
+      //read item from cache - loads from host if not found.
       __device__ uint64_t read_item(cg::thread_block_tile<tile_size> my_tile, uint64_t index){
 
+        START_TOTAL_THROUGHPUT
 
         uint64_t index_bucket = map->get_lock_bucket(my_tile, index);
          
@@ -319,11 +378,17 @@ namespace hashing_project {
 
         if (map->find_with_reference_no_lock(my_tile, index, return_val)){
 
+          ADD_QUERY
 
           map->unlock(my_tile, index_bucket);
+
+          END_FAST_THROUGHPUT
+
           return return_val;
 
         }
+
+        ADD_QUERY_NEGATIVE
 
         map->unlock(my_tile, index_bucket);
 
@@ -332,10 +397,12 @@ namespace hashing_project {
 
         uint64_t queue_loc;
 
-        if (my_tile.thread_rank() == 0){
-          queue_loc = fifo_queue->stall_lock_enqueue_replace(index, replace_index);
+        START_QUEUE_READ_THROUGHPUT
 
-          //fifo_queue->enqueue_replace(index, replace_index);
+        if (my_tile.thread_rank() == 0){
+          //queue_loc = fifo_queue->stall_lock_enqueue_replace(index, replace_index);
+
+          fifo_queue->enqueue_replace(index, replace_index);
 
         }
 
@@ -346,9 +413,13 @@ namespace hashing_project {
 
           return_val = replace_empty(my_tile, index, index_bucket);
 
-          if (my_tile.thread_rank() == 0) fifo_queue->unlock(queue_loc);
+          //if (my_tile.thread_rank() == 0) fifo_queue->unlock(queue_loc);
 
           my_tile.sync();
+
+          END_QUEUE_READ_THROUGHPUT
+
+          END_TOTAL_THROUGHPUT
 
           return return_val;
 
@@ -358,9 +429,13 @@ namespace hashing_project {
 
           return_val = replace_indices(my_tile, index, replace_index, index_bucket, replace_index_bucket);
 
-          if (my_tile.thread_rank() == 0) fifo_queue->unlock(queue_loc);
+          //if (my_tile.thread_rank() == 0) fifo_queue->unlock(queue_loc);
 
           my_tile.sync();
+
+          END_QUEUE_READ_THROUGHPUT
+
+          END_TOTAL_THROUGHPUT
 
           return return_val;
 

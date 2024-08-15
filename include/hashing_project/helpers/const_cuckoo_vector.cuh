@@ -1,5 +1,5 @@
-#ifndef SINGLE_VECTOR
-#define SINGLE_VECTOR
+#ifndef CONST_SINGLE_VECTOR
+#define CONST_SINGLE_VECTOR
 
 
 #include <cuda.h>
@@ -17,7 +17,7 @@ namespace data_structs {
 
 
   template <typename Key>
-  struct vector_pair {
+  struct const_vector_pair {
 
     uint64_t hash;
     Key key;
@@ -32,9 +32,9 @@ namespace data_structs {
   //in CUDA using Gallatin. - reads, writes, and resizes are handled
   //lazily using one thread - no guarantee of correctness among CG.
   template <typename T, int n_items>
-  struct cuckoo_vector {
+  struct const_cuckoo_vector {
 
-    using my_type = cuckoo_vector<T, n_items>;
+    using my_type = const_cuckoo_vector<T, n_items>;
 
     uint64_t size;
     T data[n_items];

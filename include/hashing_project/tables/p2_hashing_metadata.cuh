@@ -8,6 +8,9 @@
 #include <cuda_runtime_api.h>
 
 #include <gallatin/allocators/alloc_utils.cuh>
+#include <gallatin/data_structs/ds_utils.cuh>
+
+#include <hashing_project/helpers/ht_pairs.cuh>
 #include <hashing_project/helpers/probe_counts.cuh>
 #include <hashing_project/helpers/ht_load.cuh>
 
@@ -53,13 +56,6 @@ namespace hashing_project {
 namespace tables {
 
 
-
-   struct packed_tags {
-      uint64_t first;
-      uint64_t second;
-   };
-
-
    //load 8 tags and pack them
    __device__ packed_tags load_multi_tags(const uint16_t * start_of_bucket){
 
@@ -86,14 +82,29 @@ namespace tables {
    // }
 
 
+   template <typename HT, uint tile_size>
+   __global__ void p2_md_get_fill_kernel(HT * metadata_table, uint64_t n_buckets, uint64_t * item_count){
+
+
+      auto thread_block = cg::this_thread_block();
+
+      cg::thread_block_tile<tile_size> my_tile = cg::tiled_partition<tile_size>(thread_block);
+
+
+      uint64_t tid = gallatin::utils::get_tile_tid(my_tile);
+
+      if (tid >= n_buckets) return;
+
+      uint64_t n_items_in_bucket = metadata_table->get_bucket_fill(my_tile, tid);
+
+      if (my_tile.thread_rank() == 0){
+         atomicAdd((unsigned long long int *)item_count, n_items_in_bucket);
+      }
+
+
+   }
   
 
-
-   template <typename Key, typename Val>
-   struct p2_md_pair{
-      Key key;
-      Val val;
-   };
 
 
    template <typename Key, Key defaultKey, Key tombstoneKey, typename Val, Val defaultVal, Val tombstoneVal, uint partition_size, uint bucket_size>
@@ -101,7 +112,7 @@ namespace tables {
 
       //uint64_t lock_and_size;
 
-      using pair_type = p2_md_pair<Key, Val>;
+      using pair_type = ht_pair<Key, Val>;
 
       pair_type slots[bucket_size];
 
@@ -301,13 +312,84 @@ namespace tables {
                if (leader == my_tile.thread_rank()){
 
 
-                  ballot = typed_atomic_write(&slots[i].key, ext_key, ext_key);
+                  //ballot = typed_atomic_write(&slots[i].key, ext_key, ext_key);
+                  //ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
+                  ballot = (hash_table_load(&slots[i].key) == ext_key);
                   ADD_PROBE
                   if (ballot){
 
                      ht_store(&slots[i].val, ext_val);
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
+               }
+
+     
+
+                  //if leader succeeds return
+                  if (my_tile.ballot(ballot)){
+                     return __ffs(my_tile.ballot(ballot))-1;
+                  }
+                  
+
+                  //if we made it here no successes, decrement leader
+                  ballot_result  ^= 1UL << leader;
+
+                  //printf("Stalling in insert_into_bucket keys\n");
+
+               }
+
+         }
+
+
+         return -1;
+
+      }
+
+
+      #if LARGE_BUCKET_MODS
+      __device__ int upsert_existing_func(cg::thread_block_tile<partition_size> my_tile, Key ext_key, Val ext_val, uint64_t upsert_mapping, void (*replace_func)(pair_type *, Key, Val))
+      #else
+      __device__ int upsert_existing_func(cg::thread_block_tile<partition_size> my_tile, Key ext_key, Val ext_val, uint32_t upsert_mapping, void (*replace_func)(pair_type *, Key, Val))
+      #endif
+      {
+
+
+
+         //first read size
+         // internal_read_size = gallatin::utils::ldcv(&size);
+
+         // //failure means resize has started...
+         // if (internal_read_size != expected_size) return false;
+
+         for (int i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
+
+            //key needs to exist && upsert mapping shows a key exists.
+            bool key_match = (i < bucket_size) && (SET_BIT_MASK(i) & upsert_mapping);
+
+
+            //early drop if loaded_key is gone
+            // bool ballot = key_match 
+
+
+            auto ballot_result = my_tile.ballot(key_match);
+
+            while (ballot_result){
+
+               bool ballot = false;
+
+               const auto leader = __ffs(ballot_result)-1;
+
+               if (leader == my_tile.thread_rank()){
+
+                  ballot = (gallatin::utils::ld_acq(&slots[i].key) == ext_key);
+
+                  if (ballot){
+
+                     replace_func(&slots[i], ext_key, ext_val);
+
+                  }
+
+
                }
 
      
@@ -726,6 +808,8 @@ namespace tables {
 
    template <typename Key, Key emptyKey, Key tombstoneKey, typename Val, Val tombstoneVal, uint partition_size, uint bucket_size>
    struct metadata_bucket {
+
+      using pair_type = ht_pair<Key,Val>;
 
       static const uint64_t n_traversals = ((bucket_size-1)/partition_size+1)*partition_size;
 
@@ -1566,6 +1650,102 @@ namespace tables {
       }
 
 
+      template <typename bucket_type>
+      __device__ pair_type * query_md_and_bucket_pair(const cg::thread_block_tile<partition_size> & my_tile, const Key & upsert_key, bucket_type * primary_bucket)
+      {
+
+
+         ADD_PROBE_TILE
+
+
+         //uint64_t * md_as_uint64_t = (uint64_t *) metadata; 
+
+         //wipe previous
+
+         int my_count = 0;
+
+         uint16_t key_tag = get_tag(upsert_key);
+
+         for (uint i = my_tile.thread_rank(); i < (n_traversals-1)/8+1; i+=my_tile.size()){
+
+            //step in clean intervals of my_tile. 
+            uint offset = i - my_tile.thread_rank();
+
+            bool valid_to_load = i < (bucket_size-1/8)+1;
+
+            
+            //maybe change these
+            #if LARGE_BUCKET_MODS
+            //uint64_t local_empty = 0U;
+            uint64_t local_match = 0U;
+            #else
+            //uint32_t local_empty = 0U;
+            uint32_t local_match = 0U;
+            #endif
+
+
+
+            if (valid_to_load){
+
+               packed_tags loaded_pair = load_multi_tags(&metadata[i*8]);
+
+               //uint64_t loaded_key = hash_table_load(&md_as_uint64_t[i]);
+
+
+               uint16_t * load_key_indexer = (uint16_t *) &loaded_pair;
+
+
+
+
+               for (uint j = 0; j < 8; j++){
+
+                  bool found = false;
+
+                  uint16_t loaded_tag = load_key_indexer[j];
+
+                  // #if LARGE_BUCKET_MODS
+                  // uint64_t set_index = SET_BIT_MASK(i*4+j);
+                  // #else
+                  // uint32_t set_index = SET_BIT_MASK(i*4+j);
+                  // #endif
+
+                  if (loaded_tag == key_tag){
+
+                     ADD_PROBE
+
+                     Key loaded_key = hash_table_load(&primary_bucket->slots[i*8+j].key);
+
+                     if (loaded_key == upsert_key){
+
+                        found = true;
+
+                        //val = hash_table_load(&primary_bucket->slots[i*8+j].val);
+
+                     }
+
+                  }
+
+                  int leader = __ffs(my_tile.ballot(found))-1;
+
+                  if (leader != -1){
+
+                     int index = my_tile.shfl(i*8+j, leader);
+
+                     return &primary_bucket->slots[index];
+                  }
+                  
+               }
+
+            }
+
+
+         }
+
+         return nullptr;
+
+      }
+
+
 
    };
 
@@ -1595,7 +1775,7 @@ namespace tables {
 
       using bucket_type = p2_md_bucket<Key, defaultKey, tombstoneKey, Val, defaultVal, tombstoneVal, partition_size, bucket_size>;
 
-      using packed_pair_type = p2_md_pair<Key, Val>;
+      using packed_pair_type = ht_pair<Key, Val>;
 
 
 
@@ -1843,6 +2023,471 @@ namespace tables {
          return return_val;
 
        }
+
+      __device__ bool upsert_function(const tile_type & my_tile, const Key & key, const Val & val, void (*replace_func)(packed_pair_type *, Key, Val)){
+ 
+
+         uint64_t key_hash = hash(&key, sizeof(Key), seed);
+
+         uint64_t bucket_0 = get_first_bucket(key_hash);
+         //uint64_t bucket_0 = hash(&key, sizeof(Key), seed) % n_buckets;
+         
+         stall_lock(my_tile, bucket_0);
+
+         bool return_val = upsert_function_internal(my_tile, key, val, key_hash, bucket_0, replace_func);
+
+         unlock(my_tile, bucket_0);
+
+         return return_val;
+
+      }
+
+      __device__ bool upsert_function_no_lock(const tile_type & my_tile, const Key & key, const Val & val, void (*replace_func)(packed_pair_type *, Key, Val)){
+ 
+
+         uint64_t key_hash = hash(&key, sizeof(Key), seed);
+
+         uint64_t bucket_0 = get_first_bucket(key_hash);
+         //uint64_t bucket_0 = hash(&key, sizeof(Key), seed) % n_buckets;
+
+         bool return_val = upsert_function_internal(my_tile, key, val, key_hash, bucket_0, replace_func);
+
+         return return_val;
+
+      }
+
+
+      __device__ bool upsert_function_internal(const tile_type & my_tile, const Key & key, const Val & val, uint64_t key_hash, uint64_t bucket_0, void (*replace_func)(packed_pair_type *, Key, Val)){
+
+         //uint64_t bucket_0 = hash(&key, sizeof(Key), seed) % n_buckets;
+        
+
+         md_bucket_type * md_bucket_0 = get_metadata(bucket_0);
+         bucket_type * bucket_0_ptr = get_bucket_ptr(bucket_0);
+        
+
+         //first pass is the attempt to upsert/shortcut on primary
+         //if this fails enter generic load loop
+
+         //arguments for primary bucket are defined herer - needed for the primary upsert.
+         //secondary come before the main non-shortcut loop - shorcut saves registers if possible.
+
+
+         #if LARGE_BUCKET_MODS
+         uint64_t bucket_0_empty;
+         uint64_t bucket_0_tombstone;
+         uint64_t bucket_0_match;
+         #else
+
+         uint32_t bucket_0_empty;
+         uint32_t bucket_0_tombstone;
+         uint32_t bucket_0_match;
+
+         #endif
+
+
+         //global load occurs here - if counting loads this is the spot for bucket 0.
+         // #if COUNT_INSERT_PROBES
+         // ADD_PROBE_BUCKET
+         // #endif
+
+         #if LARGE_MD_LOAD
+         md_bucket_0->load_fill_ballots_huge(my_tile, key, bucket_0_empty, bucket_0_tombstone, bucket_0_match);
+
+         #else 
+
+         md_bucket_0->load_fill_ballots(my_tile, key, bucket_0_empty, bucket_0_tombstone, bucket_0_match);
+
+         #endif
+
+
+         // uint bucket_0_empty_small;
+         // uint bucket_0_tombstone_small;
+         // uint bucket_0_match_small;
+
+         // md_bucket_0->load_fill_ballots_big(my_tile, key, bucket_0_empty_small, bucket_0_tombstone_small, bucket_0_match_small);
+
+         // if (bucket_0_empty != bucket_0_empty_small){
+         //    printf("Mismatch %u != %u\n", bucket_0_empty, bucket_0_empty_small);
+         // }
+
+         
+         //bucket_0_ptr->load_fill_ballots_big(my_tile, key, bucket_0_empty, bucket_0_tombstone, bucket_0_match);
+
+         //size is bucket_size - empty slots (empty + tombstone)
+         //this saves an op over (bucket_size - __popcll(bucket_0_empty)) - __popcll(bucket_0_tombstone);
+
+         #if LARGE_BUCKET_MODS
+         uint bucket_0_size = bucket_size - __popcll(bucket_0_empty ); //| bucket_0_tombstone
+         #else
+         uint bucket_0_size = bucket_size - __popc(bucket_0_empty ); //| bucket_0_tombstone
+         #endif
+
+         //.75 shortcut for the moment.
+         while (bucket_0_size < bucket_size*P2_MD_CUTOFF){
+
+
+            //if (my_tile.thread_rank() == 0) printf("In shortcut loop %lu, %x ballot_map\n", bucket_0_size, bucket_0_empty);
+
+            #if LARGE_BUCKET_MODS
+            if (__popcll(bucket_0_match) != 0)
+            #else
+            if (__popc(bucket_0_match) != 0)
+            #endif
+            {
+
+               if (bucket_0_ptr->upsert_existing_func(my_tile, key, val, bucket_0_match, replace_func) != -1){
+                  return true;
+               }
+
+               //match was observed but has changed - move on to tombstone.
+               //because of lock other threads cannot interfere in this upsert other than deletion
+               //due to stability + lock the key must not exist anymore so we can proceed with insertion.
+               //__threadfence();
+               // continue;
+
+            }
+
+            int tombstone_pos = md_bucket_0->match_tombstone(my_tile, key, bucket_0_tombstone);
+
+            if (tombstone_pos != -1){
+
+               if (my_tile.thread_rank()  == (tombstone_pos % partition_size)){
+
+                  //temporarily make this atomic?
+
+                  // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos].key, tombstoneKey, key)){
+
+                  //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                  //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                  // }
+                  ADD_PROBE
+
+                  #if ATOMIC_VERIFY
+
+                  if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos].key, tombstoneKey, key)){
+
+                     uint16_t my_tag = md_bucket_0->get_tag(key);
+                     printf("Failed to replace tombstone %u\n\n", my_tag);
+                  }
+
+                  #else
+                  ht_store(&bucket_0_ptr->slots[tombstone_pos].key, key);
+                  #endif
+                  ht_store(&bucket_0_ptr->slots[tombstone_pos].val, val);
+
+                  __threadfence();
+
+               }
+
+               my_tile.sync();
+               return true;
+
+            }
+
+            int empty_pos = md_bucket_0->match_empty(my_tile, key, bucket_0_empty);
+
+            if (empty_pos != -1){
+
+               if (my_tile.thread_rank()  == (empty_pos % partition_size)){
+
+
+                  // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos].key, defaultKey, key)){
+                  //    printf("Failed to replace empty\n");
+                  // }
+                  ADD_PROBE
+
+                  #if ATOMIC_VERIFY
+                  if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos].key, defaultKey, key)){
+                     printf("Failed to replace empty\n");
+                  }
+                  #else
+                  ht_store(&bucket_0_ptr->slots[empty_pos].key, key);
+
+                  #endif
+                  ht_store(&bucket_0_ptr->slots[empty_pos].val, val);
+
+                  __threadfence();
+
+               }
+
+               my_tile.sync();
+               return true;
+
+
+            }
+
+            //reload
+            #if LARGE_MD_LOAD
+               md_bucket_0->load_fill_ballots_huge(my_tile, key, bucket_0_empty, bucket_0_tombstone, bucket_0_match);
+
+            #else 
+
+               md_bucket_0->load_fill_ballots(my_tile, key, bucket_0_empty, bucket_0_tombstone, bucket_0_match);
+
+            #endif
+
+
+            #if LARGE_BUCKET_MODS
+            bucket_0_size = bucket_size - __popcll(bucket_0_empty); // | bucket_0_tombstone);
+            #else
+            bucket_0_size = bucket_size - __popc(bucket_0_empty);
+            #endif
+
+
+            
+         }
+
+         //setup for alternate
+         bucket_0_size = bucket_size - __popcll(bucket_0_empty | bucket_0_tombstone); //| bucket_0_tombstone
+
+         uint64_t bucket_1 = get_second_bucket(key_hash);
+         md_bucket_type * md_bucket_1 = get_metadata(bucket_1);
+         bucket_type * bucket_1_ptr = get_bucket_ptr(bucket_1);
+
+         #if LARGE_BUCKET_MODS
+         uint64_t bucket_1_empty;
+         uint64_t bucket_1_tombstone;
+         uint64_t bucket_1_match;
+         #else
+         uint32_t bucket_1_empty;
+         uint32_t bucket_1_tombstone;
+         uint32_t bucket_1_match;
+         #endif
+         // #if COUNT_INSERT_PROBES
+         // ADD_PROBE_BUCKET
+         // #endif
+
+         #if LARGE_MD_LOAD
+         md_bucket_1->load_fill_ballots_huge(my_tile, key, bucket_1_empty, bucket_1_tombstone, bucket_1_match);
+
+         #else 
+
+         md_bucket_1->load_fill_ballots(my_tile, key, bucket_1_empty, bucket_1_tombstone, bucket_1_match);
+
+         #endif
+
+         #if LARGE_BUCKET_MODS
+         uint bucket_1_size = bucket_size - __popcll(bucket_1_empty | bucket_1_tombstone);
+         #else
+         uint bucket_1_size = bucket_size - __popc(bucket_1_empty | bucket_1_tombstone);
+         #endif
+
+
+         //return false;
+         //printf("Reached alternate\n");
+
+         //generic tile loop to perform operations.
+         while (bucket_0_size != bucket_size || bucket_1_size != bucket_size){
+
+            //check upserts
+            #if LARGE_BUCKET_MODS
+            if (__popcll(bucket_0_match) != 0){
+
+               if (bucket_0_ptr->upsert_existing_func(my_tile, key, val, bucket_0_match, replace_func) != -1){
+                  return true;
+               }
+
+            }
+
+            if (__popcll(bucket_1_match) != 0){
+
+               if (bucket_1_ptr->upsert_existing_func(my_tile, key, val, bucket_1_match, replace_func) != -1){
+                  return true;
+               }
+
+            }
+
+            #else
+
+            if (__popc(bucket_0_match) != 0){
+
+               if (bucket_0_ptr->upsert_existing_func(my_tile, key, val, bucket_0_match, replace_func) != -1){
+                  return true;
+               }
+
+            }
+
+            if (__popc(bucket_1_match) != 0){
+
+               if (bucket_1_ptr->upsert_existing_func(my_tile, key, val, bucket_1_match, replace_func) != -1){
+                  return true;
+               }
+
+            }
+
+            #endif
+
+            //check main insert
+
+            if (bucket_0_size <= bucket_1_size){
+
+
+               int tombstone_pos_0 = md_bucket_0->match_tombstone(my_tile, key, bucket_0_tombstone);
+
+               if (tombstone_pos_0 != -1){
+
+                  if (my_tile.thread_rank()  == (tombstone_pos_0 % partition_size)){
+
+                     ADD_PROBE
+
+
+                     #if ATOMIC_VERIFY
+
+                     if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos_0].key, tombstoneKey, key)){
+
+                        uint16_t my_tag = md_bucket_0->get_tag(key);
+                        printf("Failed to replace tombstone %u\n\n", my_tag);
+                     }
+
+                     #else
+                     ht_store(&bucket_0_ptr->slots[tombstone_pos_0].key, key);
+                     #endif
+                     ht_store(&bucket_0_ptr->slots[tombstone_pos_0].val, val);
+
+                     __threadfence();
+
+                  }
+
+                  my_tile.sync();
+                  return true;
+
+               }
+
+               int empty_pos_0 = md_bucket_0->match_empty(my_tile, key, bucket_0_empty);
+
+               if (empty_pos_0 != -1){
+
+                  if (my_tile.thread_rank()  == (empty_pos_0 % partition_size)){
+
+                     ADD_PROBE
+                     
+                     #if ATOMIC_VERIFY
+                     if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos_0].key, defaultKey, key)){
+                        printf("Failed to replace empty\n");
+                     }
+                     #else
+                     ht_store(&bucket_0_ptr->slots[empty_pos_0].key, key);
+
+                     #endif
+
+                     ht_store(&bucket_0_ptr->slots[empty_pos_0].val, val);
+
+                     __threadfence();
+
+                  }
+
+                  my_tile.sync();
+                  return true;
+
+
+               }
+
+
+            } else {
+
+               int tombstone_pos_1 = md_bucket_1->match_tombstone(my_tile, key, bucket_1_tombstone);
+
+               if (tombstone_pos_1 != -1){
+
+                  if (my_tile.thread_rank()  == (tombstone_pos_1 % partition_size)){
+
+                     ADD_PROBE
+
+
+                     #if ATOMIC_VERIFY
+
+                     if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[tombstone_pos_1].key, tombstoneKey, key)){
+
+                        uint16_t my_tag = md_bucket_0->get_tag(key);
+                        printf("Failed to replace tombstone %u\n\n", my_tag);
+                     }
+
+                     #else
+                     ht_store(&bucket_1_ptr->slots[tombstone_pos_1].key, key);
+                     #endif
+         
+                     ht_store(&bucket_1_ptr->slots[tombstone_pos_1].val, val);
+
+                     __threadfence();
+
+                  }
+
+                  my_tile.sync();
+                  return true;
+
+               }
+
+               int empty_pos_1 = md_bucket_1->match_empty(my_tile, key, bucket_1_empty);
+
+               if (empty_pos_1 != -1){
+
+                  if (my_tile.thread_rank()  == (empty_pos_1 % partition_size)){
+
+                     ADD_PROBE
+                     
+
+                     #if ATOMIC_VERIFY
+                     if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[empty_pos_1].key, defaultKey, key)){
+                        printf("Failed to replace empty\n");
+                     }
+                     #else
+                     ht_store(&bucket_1_ptr->slots[empty_pos_1].key, key);
+
+                     #endif
+
+                     ht_store(&bucket_1_ptr->slots[empty_pos_1].val, val);
+
+                     __threadfence();
+
+                  }
+
+                  my_tile.sync();
+                  return true;
+
+
+               }
+            
+            }
+
+            #if LARGE_MD_LOAD
+               md_bucket_0->load_fill_ballots_huge(my_tile, key, bucket_0_empty, bucket_0_tombstone, bucket_0_match);
+
+            #else 
+
+               md_bucket_0->load_fill_ballots(my_tile, key, bucket_0_empty, bucket_0_tombstone, bucket_0_match);
+
+            #endif
+
+            #if LARGE_MD_LOAD
+               md_bucket_1->load_fill_ballots_huge(my_tile, key, bucket_1_empty, bucket_1_tombstone, bucket_1_match);
+
+            #else 
+
+               md_bucket_1->load_fill_ballots(my_tile, key, bucket_1_empty, bucket_1_tombstone, bucket_1_match);
+
+            #endif
+
+
+            #if LARGE_BUCKET_MODS
+            bucket_1_size = bucket_size - __popcll(bucket_1_empty | bucket_1_tombstone);
+            bucket_0_size = bucket_size - __popcll(bucket_0_empty | bucket_0_tombstone);
+            #else
+
+            bucket_1_size = bucket_size - __popc(bucket_1_empty | bucket_1_tombstone);
+            bucket_0_size = bucket_size - __popc(bucket_0_empty | bucket_0_tombstone);
+
+            #endif
+
+
+            
+         }
+
+
+         return false;
+
+
+      }
 
 
       __device__ bool upsert_no_lock(const tile_type & my_tile, const Key & key, const Val & val){
@@ -2714,8 +3359,7 @@ namespace tables {
 
       }
 
-      // //nope! no storage
-      __device__ bool find_with_reference(tile_type my_tile, Key key, Val & val){
+      [[nodiscard]] __device__ bool find_with_reference(tile_type my_tile, Key key, Val & val){
 
 
 
@@ -2786,7 +3430,7 @@ namespace tables {
       }
 
 
-      __device__ bool find_with_reference_no_lock(tile_type my_tile, Key key, Val & val){
+      [[nodiscard]] __device__ bool find_with_reference_no_lock(tile_type my_tile, Key key, Val & val){
 
 
 
@@ -2823,6 +3467,77 @@ namespace tables {
          return false;
 
       }
+
+
+      [[nodiscard]] __device__ packed_pair_type * find_pair(const tile_type my_tile, const Key key){
+
+
+
+         uint64_t key_hash = hash(&key, sizeof(Key), seed);
+         uint64_t bucket_0 = get_first_bucket(key_hash);
+
+         stall_lock(my_tile, bucket_0);
+
+         md_bucket_type * md_bucket_0 = get_metadata(bucket_0);
+
+         bucket_type * bucket_0_ptr = get_bucket_ptr(bucket_0);
+
+
+
+
+         packed_pair_type * return_pair = md_bucket_0->query_md_and_bucket_pair(my_tile, key, bucket_0_ptr);
+
+         if (return_pair != nullptr){
+
+            unlock(my_tile, bucket_0);
+            return return_pair;
+         }
+
+         uint64_t bucket_1 = get_second_bucket(key_hash);
+
+         md_bucket_type * md_bucket_1 = get_metadata(bucket_1);
+         bucket_type * bucket_1_ptr = get_bucket_ptr(bucket_1);
+
+         return_pair = md_bucket_1->query_md_and_bucket_pair(my_tile, key, bucket_1_ptr);
+
+         unlock(my_tile, bucket_0);
+
+         return return_pair;
+
+      }
+
+
+      [[nodiscard]] __device__ packed_pair_type * find_pair_no_lock(const tile_type my_tile, const Key key){
+
+
+
+         uint64_t key_hash = hash(&key, sizeof(Key), seed);
+         uint64_t bucket_0 = get_first_bucket(key_hash);
+
+
+         md_bucket_type * md_bucket_0 = get_metadata(bucket_0);
+
+         bucket_type * bucket_0_ptr = get_bucket_ptr(bucket_0);
+
+
+
+         packed_pair_type * return_pair = md_bucket_0->query_md_and_bucket_pair(my_tile, key, bucket_0_ptr);
+
+         if (return_pair != nullptr){
+            return return_pair;
+         }
+
+         uint64_t bucket_1 = get_second_bucket(key_hash);
+
+         md_bucket_type * md_bucket_1 = get_metadata(bucket_1);
+         bucket_type * bucket_1_ptr = get_bucket_ptr(bucket_1);
+
+         return_pair = md_bucket_1->query_md_and_bucket_pair(my_tile, key, bucket_1_ptr);
+
+         return return_pair;
+
+      }
+
 
 
    
@@ -3041,6 +3756,101 @@ namespace tables {
          cudaFreeHost(host_version);
 
          printf("p2_metadata_table using %llu bytes\n", capacity);
+
+      }
+
+
+      __host__ void print_fill(){
+
+
+         uint64_t * n_items;
+
+         cudaMallocManaged((void **)&n_items, sizeof(uint64_t));
+
+         n_items[0] = 0;
+
+         my_type * host_version = gallatin::utils::copy_to_host<my_type>(this);
+
+         uint64_t n_buckets = host_version->n_buckets;
+
+
+         p2_md_get_fill_kernel<my_type, partition_size><<<(n_buckets*partition_size-1)/256+1,256>>>(this, n_buckets, n_items);
+
+         cudaDeviceSynchronize();
+         printf("fill: %lu/%lu = %f%%\n", n_items[0], n_buckets*bucket_size, 100.0*n_items[0]/(n_buckets*bucket_size));
+
+         cudaFree(n_items);
+         cudaFreeHost(host_version);
+
+
+
+      }
+
+      __host__ uint64_t get_fill(){
+
+
+         uint64_t * n_items;
+
+         cudaMallocManaged((void **)&n_items, sizeof(uint64_t));
+
+         n_items[0] = 0;
+
+         my_type * host_version = gallatin::utils::copy_to_host<my_type>(this);
+
+         uint64_t n_buckets = host_version->n_buckets;
+
+
+         p2_md_get_fill_kernel<my_type, partition_size><<<(n_buckets*partition_size-1)/256+1,256>>>(this, n_buckets, n_items);
+
+         cudaDeviceSynchronize();
+   
+         uint64_t return_items = n_items[0];
+
+         cudaFree(n_items);
+         cudaFreeHost(host_version);
+
+         return return_items;
+
+
+      }
+
+      __device__ uint64_t get_bucket_fill(tile_type my_tile, uint64_t bucket){
+
+
+         md_bucket_type * md_bucket = get_metadata(bucket);
+
+         #if LARGE_BUCKET_MODS
+         uint64_t bucket_empty;
+         uint64_t bucket_tombstone;
+         uint64_t bucket_match;
+         #else
+
+         uint32_t bucket_empty;
+         uint32_t bucket_tombstone;
+         uint32_t bucket_match;
+
+         #endif
+
+
+         //global load occurs here - if counting loads this is the spot for bucket 0.
+         // #if COUNT_INSERT_PROBES
+         // ADD_PROBE_BUCKET
+         // #endif
+
+         #if LARGE_MD_LOAD
+         md_bucket->load_fill_ballots_huge(my_tile, defaultKey, bucket_empty, bucket_tombstone, bucket_match);
+
+         return bucket_size-__popcll(bucket_empty)-__popcll(bucket_tombstone);
+
+         #else 
+
+         md_bucket->load_fill_ballots(my_tile, defaultKey, bucket_empty, bucket_tombstone, bucket_match);
+
+         return bucket_size-__popc(bucket_empty) - __popc(bucket_tombstone);
+
+         #endif
+
+
 
       }
 

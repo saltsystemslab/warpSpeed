@@ -9,6 +9,7 @@
 
 #include <gallatin/allocators/alloc_utils.cuh>
 
+#include <hashing_project/helpers/ht_pairs.cuh>
 #include <hashing_project/helpers/probe_counts.cuh>
 #include <hashing_project/helpers/ht_load.cuh>
 
@@ -57,15 +58,29 @@ namespace tables {
    //   // atom{.sem}{.scope}{.space}.cas.b128 d, [a], b, c {, cache-policy};
    // }
 
+   template <typename HT, uint tile_size>
+   __global__ void double_get_fill_kernel(HT * metadata_table, uint64_t n_buckets, uint64_t * item_count){
 
-  
+
+      auto thread_block = cg::this_thread_block();
+
+      cg::thread_block_tile<tile_size> my_tile = cg::tiled_partition<tile_size>(thread_block);
 
 
-   template <typename Key, typename Val>
-   struct double_pair{
-      Key key;
-      Val val;
-   };
+      uint64_t tid = gallatin::utils::get_tile_tid(my_tile);
+
+      if (tid >= n_buckets) return;
+
+      uint64_t n_items_in_bucket = metadata_table->get_bucket_fill(my_tile, tid);
+
+      if (my_tile.thread_rank() == 0){
+         atomicAdd((unsigned long long int *)item_count, n_items_in_bucket);
+      }
+
+
+   }
+
+
 
 
    template <typename Key, Key defaultKey, Key tombstoneKey, typename Val, Val defaultVal, Val tombstoneVal, uint partition_size, uint bucket_size>
@@ -73,7 +88,7 @@ namespace tables {
 
       //uint64_t lock_and_size;
 
-      using pair_type = double_pair<Key, Val>;
+      using pair_type = ht_pair<Key, Val>;
 
       pair_type slots[bucket_size];
 
@@ -615,7 +630,7 @@ namespace tables {
 
       using bucket_type = double_bucket<Key, defaultKey, tombstoneKey, Val, defaultVal, tombstoneVal, partition_size, bucket_size>;
 
-      using packed_pair_type = double_pair<Key, Val>;
+      using packed_pair_type = ht_pair<Key, Val>;
 
       bucket_type * primary_buckets;
       //bucket_type * alt_buckets;
@@ -879,7 +894,86 @@ namespace tables {
       }
 
 
-       __device__ bool upsert_generic(const tile_type & my_tile, const Key & key, const Val & val){
+      __device__ bool upsert_function(const tile_type & my_tile, const Key & key, const Val & val, void (*replace_func)(packed_pair_type *, Key, Val)){
+
+
+         uint64_t key_hash = hash(&key, sizeof(Key), seed);
+         uint64_t bucket_0 = get_first_bucket(key_hash);
+         uint64_t step = get_stride(key_hash);
+         
+         stall_lock_primary(my_tile, bucket_0);
+
+
+         packed_pair_type * existing_loc = query_packed_reference(my_tile, key, bucket_0, step);
+
+         if (existing_loc != nullptr){
+
+
+            if (my_tile.thread_rank() == 0){
+
+
+               replace_func(existing_loc, key, val);
+              __threadfence();
+
+            }
+
+            //this syncs.
+            unlock_primary(my_tile, bucket_0);
+            //my_tile.sync();
+
+
+            return true;
+         }     
+
+         bool return_val = upsert_generic_internal(my_tile, key, val, bucket_0, step);
+
+         unlock_primary(my_tile, bucket_0);
+
+         return return_val;
+
+      }
+
+      __device__ bool upsert_function_no_lock(const tile_type & my_tile, const Key & key, const Val & val, void (*replace_func)(packed_pair_type *, Key, Val)){
+
+
+         uint64_t key_hash = hash(&key, sizeof(Key), seed);
+         uint64_t bucket_0 = get_first_bucket(key_hash);
+         uint64_t step = get_stride(key_hash);
+         
+         //stall_lock_primary(my_tile, bucket_0);
+
+
+         packed_pair_type * existing_loc = query_packed_reference(my_tile, key, bucket_0, step);
+
+         if (existing_loc != nullptr){
+
+
+            if (my_tile.thread_rank() == 0){
+
+
+               replace_func(existing_loc, key, val);
+              __threadfence();
+
+            }
+
+            //this syncs.
+            //unlock_primary(my_tile, bucket_0);
+            //my_tile.sync();
+
+
+            return true;
+         }     
+
+         bool return_val = upsert_generic_internal(my_tile, key, val, bucket_0, step);
+
+         //unlock_primary(my_tile, bucket_0);
+
+         return return_val;
+
+      }
+
+
+      __device__ bool upsert_generic(const tile_type & my_tile, const Key & key, const Val & val){
 
 
          uint64_t key_hash = hash(&key, sizeof(Key), seed);
@@ -985,6 +1079,9 @@ namespace tables {
             while (__popc(bucket_empty | bucket_tombstone) != 0){
 
 
+               // if (__popc(bucket_match) != 0){
+               //    printf("Replacement triggered\n");
+               // }
                // if (__popc(bucket_match != 0)){
 
                //    printf("Replacement triggered\n");
@@ -1096,7 +1193,7 @@ namespace tables {
       }
 
       // //nope! no storage
-      __device__ bool find_with_reference(tile_type my_tile, Key key, Val & val){
+      [[nodiscard]] __device__ bool find_with_reference(tile_type my_tile, Key key, Val & val){
 
 
          //return false;
@@ -1117,6 +1214,7 @@ namespace tables {
 
          }
 
+         ADD_PROBE_TILE
          val = hash_table_load(val_location);
          __threadfence();
 
@@ -1125,7 +1223,7 @@ namespace tables {
 
       }
 
-      __device__ bool find_with_reference_no_lock(tile_type my_tile, Key key, Val & val){
+      [[nodiscard]] __device__ bool find_with_reference_no_lock(tile_type my_tile, Key key, Val & val){
 
 
          //return false;
@@ -1138,6 +1236,7 @@ namespace tables {
 
          //stall_lock(my_tile, bucket_primary);
 
+         ADD_PROBE_TILE
          Val * val_location = query_reference(my_tile, key, bucket_primary, step);
 
          if (val_location == nullptr){
@@ -1151,6 +1250,47 @@ namespace tables {
 
          //unlock(my_tile, bucket_primary);
          return true;
+
+      }
+
+      [[nodiscard]] __device__ packed_pair_type * find_pair(tile_type my_tile, Key key){
+
+
+            //return false;
+
+
+            uint64_t key_hash = hash(&key, sizeof(Key), seed);
+            uint64_t bucket_primary = get_first_bucket(key_hash);
+            uint64_t step = get_stride(key_hash);
+
+
+            stall_lock(my_tile, bucket_primary);
+
+            packed_pair_type * val_location = query_packed_reference(my_tile, key, bucket_primary, step);
+
+            unlock(my_tile, bucket_primary);
+
+            return val_location;
+
+         }
+
+      [[nodiscard]] __device__ packed_pair_type * find_pair_no_lock(tile_type my_tile, Key key){
+
+
+            //return false;
+
+
+            uint64_t key_hash = hash(&key, sizeof(Key), seed);
+            uint64_t bucket_primary = get_first_bucket(key_hash);
+            uint64_t step = get_stride(key_hash);
+
+
+            
+
+            packed_pair_type * val_location = query_packed_reference(my_tile, key, bucket_primary, step);
+
+
+            return val_location;
 
       }
 
@@ -1287,6 +1427,71 @@ namespace tables {
          cudaFreeHost(host_version);
 
          printf("double_hashing using %llu bytes\n", capacity);
+
+      }
+
+      __host__ void print_fill(){
+
+
+
+         my_type * host_version = gallatin::utils::copy_to_host<my_type>(this);
+
+         uint64_t n_buckets = host_version->n_buckets_primary;
+
+
+         uint64_t n_items = get_fill();
+
+         cudaDeviceSynchronize();
+         printf("fill: %lu/%lu = %f%%\n", n_items, n_buckets*bucket_size, 100.0*n_items/(n_buckets*bucket_size));
+
+         cudaFreeHost(host_version);
+
+
+
+      }
+
+      __host__ uint64_t get_fill(){
+
+
+         uint64_t * n_items;
+
+         cudaMallocManaged((void **)&n_items, sizeof(uint64_t));
+
+         n_items[0] = 0;
+
+         my_type * host_version = gallatin::utils::copy_to_host<my_type>(this);
+
+         uint64_t n_buckets = host_version->n_buckets_primary;
+
+
+         double_get_fill_kernel<my_type, partition_size><<<(n_buckets*partition_size-1)/256+1,256>>>(this, n_buckets, n_items);
+
+         cudaDeviceSynchronize();
+   
+         uint64_t return_items = n_items[0];
+
+         cudaFree(n_items);
+         cudaFreeHost(host_version);
+
+         return return_items;
+
+
+
+      }
+
+      __device__ uint64_t get_bucket_fill(tile_type my_tile, uint64_t bucket){
+
+
+         bucket_type * bucket_ptr = get_bucket_ptr_primary(bucket);
+
+
+         uint32_t bucket_empty;
+         uint32_t bucket_tombstone;
+         uint32_t bucket_match;
+
+         bucket_ptr->load_fill_ballots(my_tile, defaultKey, bucket_empty, bucket_tombstone, bucket_match);
+
+         return bucket_size-__popc(bucket_empty) - __popc(bucket_tombstone);
 
       }
 

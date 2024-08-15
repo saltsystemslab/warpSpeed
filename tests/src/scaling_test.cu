@@ -48,6 +48,7 @@ namespace fs = std::filesystem;
 #include <hashing_project/tables/chaining.cuh>
 #include <hashing_project/tables/p2_hashing_metadata.cuh>
 #include <hashing_project/tables/cuckoo.cuh>
+#include <hashing_project/tables/double_hashing_metadata.cuh>
 
 #include <iostream>
 #include <locale>
@@ -519,6 +520,9 @@ int main(int argc, char** argv) {
 
 
    run_scaling<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+
+
+   run_scaling<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
    
    init_global_allocator(30ULL*1024*1024*1024, 111);

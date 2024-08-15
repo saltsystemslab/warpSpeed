@@ -105,15 +105,59 @@ namespace helpers {
       return item == default_value;
     }
 
+
+    __device__ void enqueue(T new_item, uint64_t enqueue_slot){
+
+
+
+        uint64_t old_item = default_value;
+
+        while (old_item == default_value){
+          old_item = typed_atomic_CAS(&buffer[enqueue_slot], default_value, new_item);
+        }
+
+    }
+
+
+    __device__ T dequeue(uint64_t dequeue_slot){
+
+      return typed_atomic_exchange(&buffer[dequeue_slot], default_value);
+
+
+    }
+
     __device__ void enqueue_replace(T new_item, T & old_item){
 
-      uint64_t enqueue_slot = atomicAdd((unsigned long long int *)&enqueue_counter, 1ULL) % num_slots;
+      uint64_t total_enqueue_slot = atomicAdd((unsigned long long int *)&enqueue_counter, 1ULL);
 
-      //stall_lock(enqueue_slot);
+      if (total_enqueue_slot < num_slots){
 
-      old_item = typed_atomic_exchange(&buffer[enqueue_slot], new_item);
+        old_item = typed_atomic_exchange(&buffer[total_enqueue_slot], new_item);
+
+        return;
+
+      }
+
+      //dequeue old.
+
+      if (total_enqueue_slot < num_slots){
+        old_item = typed_atomic_exchange(&buffer[total_enqueue_slot], new_item);
+
+        return;
+      } else {
+
+
+      uint64_t enqueue_slot = total_enqueue_slot % num_slots;
+
+      old_item = dequeue(enqueue_slot);
+
+      __threadfence();
+
+      enqueue(new_item, enqueue_slot);
 
       return;
+
+      }
 
     }
 
@@ -142,7 +186,7 @@ namespace helpers {
 
         while (atomicOr((unsigned long long int *)&locks[high], (unsigned long long int) SET_BIT_MASK(low)) & SET_BIT_MASK(low)){
 
-          printf("Stalling on %llu\n", loc);
+          //printf("Stalling on %llu\n", loc);
 
         }
 

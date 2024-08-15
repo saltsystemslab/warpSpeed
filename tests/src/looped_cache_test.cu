@@ -46,6 +46,7 @@ namespace fs = std::filesystem;
 #include <hashing_project/tables/p2_hashing_external.cuh>
 #include <hashing_project/tables/iht_p2_metadata.cuh>
 #include <hashing_project/tables/iht_p2_metadata_full.cuh>
+#include <hashing_project/tables/double_hashing_metadata.cuh>
 #include <cooperative_groups.h>
 
 namespace cg = cooperative_groups;
@@ -165,8 +166,35 @@ __host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pa
 
    cudaDeviceSynchronize();
 
-   //for (int i = 10; i <= 20; i++){
-   for (int i = 2; i <= 20; i++){
+
+
+   //first round - one percent
+
+
+   uint64_t tiny_capacity = host_items*(.01);
+
+   cache_type * tiny_cache = cache_type::generate_on_device(host_items, tiny_capacity, .85);
+
+   cudaDeviceSynchronize();
+
+   gallatin::utils::timer tiny_cache_timing;
+
+   cache_read_kernel<cache_type, tile_size><<<(n_ops*tile_size -1)/256+1,256>>>(tiny_cache, host_items, dev_data, n_ops);
+
+   tiny_cache_timing.sync_end();
+
+   double tiny_duration = tiny_cache_timing.elapsed();
+
+   myfile << .01 << " " << std::setprecision(12) << 1.0*n_ops/(tiny_duration*1000000) << "\n";
+
+   cache_type::free_on_device(tiny_cache);
+
+
+
+
+
+   //for (int i = 10; i < 11; i++){
+   for (int i = 2; i <= 14; i++){
 
       uint64_t capacity = host_items*(.05*i);
 
@@ -242,14 +270,17 @@ int main(int argc, char** argv) {
 
    // free_global_allocator();
 
+   cache_test<hashing_project::tables::md_double_generic, 4, 32>(host_items, n_ops, access_data);
+  
+
 
    // cache_test<hashing_project::tables::p2_int_generic, 8, 32>(host_items, n_ops, access_data);
-   // cache_test<hashing_project::tables::double_generic, 4, 8>(host_items, n_ops, access_data);
+   //cache_test<hashing_project::tables::double_generic, 8, 8>(host_items, n_ops, access_data);
    // cache_test<hashing_project::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data);
    // cache_test<hashing_project::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data);
    // cache_test<hashing_project::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data);
 
-   cache_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data);
+   // cache_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data);
    
 
 

@@ -51,6 +51,9 @@ namespace fs = std::filesystem;
 #include <hashing_project/tables/iht_p2_metadata.cuh>
 #include <hashing_project/tables/iht_p2_metadata_full.cuh>
 #include <hashing_project/tables/cuckoo.cuh>
+#include <hashing_project/tables/double_hashing_metadata.cuh>
+
+
 
 #include <iostream>
 #include <locale>
@@ -172,15 +175,15 @@ __global__ void insert_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64
    } else {
       
 
-      DATA_TYPE my_val;
+      // DATA_TYPE my_val;
 
-      if (!table->find_with_reference(my_tile, my_key, my_val)){
+      // if (!table->find_with_reference(my_tile, my_key, my_val)){
 
-         table->upsert_generic(my_tile, my_key, my_key);
+      //    table->upsert_generic(my_tile, my_key, my_key);
 
-         table->find_with_reference(my_tile, my_key, my_val);
-         //printf("Failed query\n");
-      }
+      //    table->find_with_reference(my_tile, my_key, my_val);
+      //    //printf("Failed query\n");
+      // }
 
    }
 
@@ -272,6 +275,7 @@ __global__ void query_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64_
 
 
         //table->find_with_reference(my_tile, my_key, my_val);
+
 
          atomicAdd((unsigned long long int *)&misses[1], 1ULL);
       }
@@ -401,6 +405,8 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
       //free tables and generate results
       cudaFree(device_data);
 
+      //table->print_chain_stats();
+
       ht_type::free_on_device(table);
 
       insert_timer.print_throughput("Inserted", items_to_insert);
@@ -425,6 +431,8 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
       misses[1] = 0;
       misses[2] = 0;
       cudaDeviceSynchronize();
+
+
 
       //cuckoo is not leaking memory oon device.
       //gallatin::allocators::print_global_stats();
@@ -664,6 +672,8 @@ __host__ void lf_test_BGHT(uint64_t n_indices, DATA_TYPE * access_pattern, std::
       cudaFree(output);
 
 
+
+
    }
 
    myfile.close();
@@ -685,7 +695,7 @@ int main(int argc, char** argv) {
 
 
    if (argc < 2){
-      table_capacity = 1000000;
+      table_capacity = 100000000;
    } else {
       table_capacity = std::stoull(argv[1]);
    }
@@ -745,39 +755,38 @@ int main(int argc, char** argv) {
 
    // lf_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, access_pattern);
 
-   // lf_test<hashing_project::tables::p2_int_generic, 8, 32>(table_capacity, access_pattern);
 
    // lf_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, access_pattern);
 
-   // lf_test<hashing_project::tables::double_generic, 4, 8>(table_capacity, access_pattern);
 
 
    
+   //lf_test<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, access_pattern);
+
+
 
    
-   // init_global_allocator(15ULL*1024*1024*1024, 111);
+   init_global_allocator(15ULL*1024*1024*1024, 111);
 
-   // lf_test<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, access_pattern);
+   lf_test<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, access_pattern);
 
    
 
-   // free_global_allocator();
+   free_global_allocator();
 
-   cudaDeviceSynchronize();
+   // cudaDeviceSynchronize();
 
-   lf_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, access_pattern);
+   //lf_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, access_pattern);
    
-   lf_test<hashing_project::tables::cuckoo_generic, 8, 8>(table_capacity, access_pattern);
+   // lf_test<hashing_project::tables::cuckoo_generic, 8, 8>(table_capacity, access_pattern);
    
 
-   //lf_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
+   // lf_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
    
-   //lf_test<hashing_project::tables::iht_p2_metadata_generic, 4, 32>(table_capacity, access_pattern);
 
-   //lf_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, access_pattern);
+   // lf_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, access_pattern);
 
-   //lf_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, access_pattern);
-
+  
 
 
    // printf("Starting BGHT tests\n");
@@ -794,6 +803,8 @@ int main(int argc, char** argv) {
    // lf_test_BGHT<bght::p2bht16, 16>(table_capacity, access_pattern, "p2bht_16");
    
    // lf_test_BGHT<bght::p2bht32, 32>(table_capacity, access_pattern, "p2bht_32");
+
+
 
 
 

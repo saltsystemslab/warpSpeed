@@ -11,6 +11,8 @@
 
 #define LOAD_CHEAP 0
 
+#define MEASURE_INDEPENDENT 1
+
 // #define COUNT_PROBES 1
 
 #include <gallatin/allocators/global_allocator.cuh>
@@ -50,6 +52,7 @@ namespace fs = std::filesystem;
 #include <hashing_project/tables/p2_hashing_metadata.cuh>
 #include <hashing_project/tables/iht_p2_metadata_full.cuh>
 #include <hashing_project/tables/cuckoo.cuh>
+#include <hashing_project/tables/double_hashing_metadata.cuh>
 
 
 #include <iostream>
@@ -70,7 +73,7 @@ using namespace gallatin::allocators;
 
 #define MEASURE_FAILS 1
 
-#define MEASURE_INDEPENDENT 1
+
 
 #define PRINT_THROUGHPUT_ONLY 0
 
@@ -204,6 +207,9 @@ __global__ void sawtooth_kernel(ht_type * table, DATA_TYPE * item_buffer, uint64
             atomicAdd((unsigned long long int *)&misses[1], 1ULL);
          }
          #endif
+
+         //table->upsert_generic(my_tile, my_key, my_key);
+
       }
    } else if (my_code == 1){
       if (!table->remove(my_tile, my_key)){
@@ -677,6 +683,7 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
 
    }
 
+
    //
    //std::cout.imbue(std::locale(std::cout.getloc(), thousands.release()));
    #if !PRINT_THROUGHPUT_ONLY
@@ -792,7 +799,7 @@ int main(int argc, char** argv) {
 
 
    if (argc < 2){
-      table_capacity = 1000000;
+      table_capacity = 100000000;
    } else {
       table_capacity = std::stoull(argv[1]);
    }
@@ -845,13 +852,13 @@ int main(int argc, char** argv) {
    auto negative_pattern = generate_data<DATA_TYPE>(table_capacity+replacement_items);
 
 
-   sawtooth_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   sawtooth_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   sawtooth_test<hashing_project::tables::double_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   //sawtooth_test<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   sawtooth_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   //sawtooth_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
 
    init_global_allocator(8ULL*1024*1024*1024, 111);
@@ -860,10 +867,10 @@ int main(int argc, char** argv) {
 
    free_global_allocator();
    
-   sawtooth_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
       
    
-   sawtooth_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
    
 
    //sawtooth_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds); 

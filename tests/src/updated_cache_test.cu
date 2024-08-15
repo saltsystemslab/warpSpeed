@@ -8,8 +8,7 @@
  */
 
 
-
-
+#define CACHE_COUNT_OPS 1
 
 #include <gallatin/allocators/global_allocator.cuh>
 

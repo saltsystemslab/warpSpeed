@@ -3,6 +3,7 @@
 
 
 #include <gallatin/allocators/alloc_utils.cuh>
+#include <hashing_project/helpers/ht_pairs.cuh>
 
 
 
@@ -44,7 +45,8 @@ __device__ inline pair ht_load_metadata (const uint16_t * address) {
 template <typename T>
 __device__ inline T hash_table_load(const T * address){
 
-
+  #pragma message "You shouldn't see this compile - Hash table loading value that is too large"
+  //static_assert(1 == 0);
   asm volatile ("trap;");
 
 

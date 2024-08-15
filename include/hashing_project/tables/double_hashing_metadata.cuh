@@ -2115,7 +2115,7 @@ namespace tables {
             return true;
          }     
 
-         bool return_val = upsert_generic_internal(my_tile, key, val, bucket_0, step);
+         bool return_val = upsert_replace_internal(my_tile, key, val, bucket_0, step);
 
          unlock(my_tile, bucket_0);
 
@@ -2155,7 +2155,7 @@ namespace tables {
             return true;
          }     
 
-         bool return_val = upsert_generic_internal(my_tile, key, val, bucket_0, step);
+         bool return_val = upsert_replace_internal(my_tile, key, val, bucket_0, step);
 
 
 
@@ -2165,7 +2165,7 @@ namespace tables {
 
 
 
-      __device__ bool upsert_generic(const tile_type & my_tile, const Key & key, const Val & val){
+      __device__ bool upsert_replace(const tile_type & my_tile, const Key & key, const Val & val){
 
 
          uint64_t key_hash = hash(&key, sizeof(Key), seed);
@@ -2195,7 +2195,7 @@ namespace tables {
             return true;
          }     
 
-         bool return_val = upsert_generic_internal(my_tile, key, val, bucket_0, step);
+         bool return_val = upsert_replace_internal(my_tile, key, val, bucket_0, step);
 
          unlock(my_tile, bucket_0);
 
@@ -2231,13 +2231,13 @@ namespace tables {
             return true;
          }     
 
-         bool return_val = upsert_generic_internal(my_tile, key, val, bucket_0, step);
+         bool return_val = upsert_replace_internal(my_tile, key, val, bucket_0, step);
 
          return return_val;
 
       }
 
-      __device__ bool upsert_generic_internal(const tile_type & my_tile, const Key & key, const Val & val, uint64_t bucket_primary, uint64_t step){
+      __device__ bool upsert_replace_internal(const tile_type & my_tile, const Key & key, const Val & val, uint64_t bucket_primary, uint64_t step){
 
          //uint64_t bucket_0 = hash(&key, sizeof(Key), seed) % n_buckets;
 

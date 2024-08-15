@@ -106,8 +106,8 @@ namespace wrappers {
       }
 
 
-      __device__ void upsert_generic(tile_type my_tile, Key key, Val val){
-         return internal_table->upsert_generic(my_tile, key, val);
+      __device__ void upsert_replace(tile_type my_tile, Key key, Val val){
+         return internal_table->upsert_replace(my_tile, key, val);
       }
 
       static char * get_name(){

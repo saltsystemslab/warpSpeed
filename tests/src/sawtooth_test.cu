@@ -157,9 +157,9 @@ __global__ void insert_only_kernel(ht_type * table, DATA_TYPE * insert_buffer, u
 
    uint64_t my_key = insert_buffer[tid];
 
-   if (!table->upsert_generic(my_tile, my_key, my_key)){
+   if (!table->upsert_replace(my_tile, my_key, my_key)){
 
-      //table->upsert_generic(my_tile, my_key, my_key);
+      //table->upsert_replace(my_tile, my_key, my_key);
 
 
       #if MEASURE_FAILS
@@ -201,14 +201,14 @@ __global__ void sawtooth_kernel(ht_type * table, DATA_TYPE * item_buffer, uint64
 
    if (my_code == 0){
       //return;
-      if (!table->upsert_generic(my_tile, my_key, my_key)){
+      if (!table->upsert_replace(my_tile, my_key, my_key)){
          #if MEASURE_FAILS
          if (my_tile.thread_rank() == 0){
             atomicAdd((unsigned long long int *)&misses[1], 1ULL);
          }
          #endif
 
-         //table->upsert_generic(my_tile, my_key, my_key);
+         //table->upsert_replace(my_tile, my_key, my_key);
 
       }
    } else if (my_code == 1){
@@ -264,9 +264,9 @@ __global__ void sawtooth_insert(ht_type * table, DATA_TYPE * item_buffer, uint64
 
    if (my_code == 0){
       //return;
-      if (!table->upsert_generic(my_tile, my_key, my_key)){
+      if (!table->upsert_replace(my_tile, my_key, my_key)){
 
-         table->upsert_generic(my_tile, my_key, my_key);
+         table->upsert_replace(my_tile, my_key, my_key);
          #if MEASURE_FAILS
          if (my_tile.thread_rank() == 0){
             atomicAdd((unsigned long long int *)&misses[1], 1ULL);
@@ -852,13 +852,13 @@ int main(int argc, char** argv) {
    auto negative_pattern = generate_data<DATA_TYPE>(table_capacity+replacement_items);
 
 
-   // sawtooth_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   sawtooth_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   // sawtooth_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   sawtooth_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   //sawtooth_test<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   sawtooth_test<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   //sawtooth_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   sawtooth_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
 
    init_global_allocator(8ULL*1024*1024*1024, 111);
@@ -867,13 +867,13 @@ int main(int argc, char** argv) {
 
    free_global_allocator();
    
-   // sawtooth_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   sawtooth_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
       
    
-   // sawtooth_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   sawtooth_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
    
 
-   //sawtooth_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds); 
+   sawtooth_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds); 
 
    cudaFreeHost(access_pattern);
 

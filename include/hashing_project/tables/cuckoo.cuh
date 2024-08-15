@@ -1409,7 +1409,7 @@ template <typename HT, uint tile_size>
        }
 
 
-       __device__ bool upsert_generic(const tile_type & my_tile, const Key & key, const Val & val){
+       __device__ bool upsert_replace(const tile_type & my_tile, const Key & key, const Val & val){
 
 
          __shared__ vector_type data_vectors[64];
@@ -1473,7 +1473,7 @@ template <typename HT, uint tile_size>
 
             my_tile.sync();
 
-            bool return_val = upsert_generic_internal(my_tile, key, val, my_vector);
+            bool return_val = upsert_replace_internal(my_tile, key, val, my_vector);
 
             my_tile.sync();
 
@@ -1990,7 +1990,7 @@ template <typename HT, uint tile_size>
        }
 
       //start by booting all keys, then circle back and see if there is a replacement we can do once our lock is acquired.
-      __device__ bool upsert_generic_internal(const tile_type & my_tile, const Key & key, const Val & val, vector_type * order_vector){
+      __device__ bool upsert_replace_internal(const tile_type & my_tile, const Key & key, const Val & val, vector_type * order_vector){
 
 
 

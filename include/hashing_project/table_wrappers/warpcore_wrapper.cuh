@@ -109,11 +109,11 @@ namespace wrappers {
       }
 
 
-      __device__ bool upsert_generic(tile_type my_tile, Key key, Val val){
+      __device__ bool upsert_replace(tile_type my_tile, Key key, Val val){
 
          return internal_table->upsert(key, val, my_tile);
 
-         //return internal_table->upsert_generic(pack_together(key, val), my_tile);
+         //return internal_table->upsert_replace(pack_together(key, val), my_tile);
       }
 
       // //nope! no storage

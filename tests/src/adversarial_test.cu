@@ -525,7 +525,7 @@ __global__ void round_1_adverserial_workload_generic(HT * table, uint32_t n_buck
    uint32_t my_val = 0;
 
 
-   table->upsert_generic(my_tile, my_key, my_val);
+   table->upsert_replace(my_tile, my_key, my_val);
 
 }
 
@@ -558,7 +558,7 @@ __global__ void round_2_adverserial_workload_generic(HT * table, uint32_t n_buck
       uint32_t my_key = second_round[tid];
       uint32_t my_val = key_select;
 
-      table->upsert_generic(my_tile, my_key, my_val);
+      table->upsert_replace(my_tile, my_key, my_val);
    }
 
 }

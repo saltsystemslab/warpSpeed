@@ -179,7 +179,7 @@ __device__ bool find_by_reference(tile_type const& tile, key_type const& key, ma
    * operation - replacements are considered true.
    */
 
-  __device__ bool upsert_generic(value_type const& pair, tile_type const& tile);
+  __device__ bool upsert_replace(value_type const& pair, tile_type const& tile);
 
   /**
    * @brief Device-side cooperative find API that finds a single pair into the hash

@@ -1049,7 +1049,7 @@ namespace tables {
       }
 
 
-       __device__ bool upsert_generic(const tile_type & my_tile, const Key & key, const Val & val){
+       __device__ bool upsert_replace(const tile_type & my_tile, const Key & key, const Val & val){
 
 
          __shared__ vector_type data_vectors[32];
@@ -1169,7 +1169,7 @@ namespace tables {
 
             my_tile.sync();
 
-            bool return_val = upsert_generic_nolock(my_tile, key, val, my_vector);
+            bool return_val = upsert_replace_nolock(my_tile, key, val, my_vector);
 
             my_tile.sync();
 
@@ -1578,7 +1578,7 @@ namespace tables {
        }
 
 
-      __device__ bool upsert_generic_nolock(const tile_type & my_tile, const Key & key, const Val & val, vector_type * order_vector){
+      __device__ bool upsert_replace_nolock(const tile_type & my_tile, const Key & key, const Val & val, vector_type * order_vector){
 
 
          if (replace_reference(my_tile, key, val)) return true;

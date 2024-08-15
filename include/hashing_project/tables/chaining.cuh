@@ -1033,7 +1033,7 @@ namespace tables {
       }
 
 
-      __device__ bool upsert_generic_internal(const cg::thread_block_tile<partition_size> & my_tile, const Key & newKey, const Val & newVal){
+      __device__ bool upsert_replace_internal(const cg::thread_block_tile<partition_size> & my_tile, const Key & newKey, const Val & newVal){
 
          uint64_t my_slot;
          block_type * my_block;
@@ -1121,7 +1121,7 @@ namespace tables {
 
 
 
-         bool return_val = upsert_generic_internal(my_tile, key, val);
+         bool return_val = upsert_replace_internal(my_tile, key, val);
 
          //unlock(my_tile, bucket_0);
 
@@ -1180,7 +1180,7 @@ namespace tables {
          return;
       }
 
-      __device__ bool upsert_generic(const tile_type & my_tile, const Key & key, const Val & val){
+      __device__ bool upsert_replace(const tile_type & my_tile, const Key & key, const Val & val){
 
          uint64_t bucket_0 = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
 
@@ -1205,7 +1205,7 @@ namespace tables {
 
 
 
-         bool return_val = upsert_generic_internal(my_tile, key, val);
+         bool return_val = upsert_replace_internal(my_tile, key, val);
 
          unlock(my_tile, bucket_0);
 
@@ -1240,7 +1240,7 @@ namespace tables {
 
 
 
-         bool return_val = upsert_generic_internal(my_tile, key, val);
+         bool return_val = upsert_replace_internal(my_tile, key, val);
 
          unlock(my_tile, bucket_0);
 
@@ -1275,7 +1275,7 @@ namespace tables {
 
 
 
-         bool return_val = upsert_generic_internal(my_tile, key, val);
+         bool return_val = upsert_replace_internal(my_tile, key, val);
 
          //unlock(my_tile, bucket_0);
 

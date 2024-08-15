@@ -159,9 +159,9 @@ __global__ void insert_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64
 
    uint64_t my_key = insert_buffer[tid];
 
-   if (!table->upsert_generic(my_tile, my_key, my_key)){
+   if (!table->upsert_replace(my_tile, my_key, my_key)){
 
-      //table->upsert_generic(my_tile, my_key, my_key);
+      //table->upsert_replace(my_tile, my_key, my_key);
 
 
       #if MEASURE_FAILS
@@ -179,7 +179,7 @@ __global__ void insert_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64
 
       // if (!table->find_with_reference(my_tile, my_key, my_val)){
 
-      //    table->upsert_generic(my_tile, my_key, my_key);
+      //    table->upsert_replace(my_tile, my_key, my_key);
 
       //    table->find_with_reference(my_tile, my_key, my_val);
       //    //printf("Failed query\n");
@@ -212,7 +212,7 @@ __global__ void remove_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64
 
    if (!table->remove(my_tile, my_key)){
 
-      // table->upsert_generic(my_tile, my_key, my_key);
+      // table->upsert_replace(my_tile, my_key, my_key);
 
       // table->remove(my_tile, my_key);
 
@@ -256,7 +256,7 @@ __global__ void query_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64_
 
    if (!table->find_with_reference(my_tile, my_key, my_val)){
 
-      //table->upsert_generic(my_tile, my_key, my_key);
+      //table->upsert_replace(my_tile, my_key, my_key);
 
       //table->find_with_reference(my_tile, my_key, my_val);
 
@@ -753,15 +753,15 @@ int main(int argc, char** argv) {
    //print_duplicates<DATA_TYPE>(access_pattern, table_capacity);
    
 
-   // lf_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, access_pattern);
+   lf_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, access_pattern);
 
 
-   // lf_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, access_pattern);
+   lf_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, access_pattern);
 
 
 
    
-   //lf_test<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, access_pattern);
+   lf_test<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, access_pattern);
 
 
 
@@ -774,17 +774,17 @@ int main(int argc, char** argv) {
 
    free_global_allocator();
 
-   // cudaDeviceSynchronize();
+   cudaDeviceSynchronize();
 
-   //lf_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, access_pattern);
+   lf_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, access_pattern);
    
-   // lf_test<hashing_project::tables::cuckoo_generic, 8, 8>(table_capacity, access_pattern);
-   
-
-   // lf_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
+   lf_test<hashing_project::tables::cuckoo_generic, 8, 8>(table_capacity, access_pattern);
    
 
-   // lf_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, access_pattern);
+   lf_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
+   
+
+   lf_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, access_pattern);
 
   
 

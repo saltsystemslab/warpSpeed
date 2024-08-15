@@ -393,7 +393,7 @@ __device__ bool bght::p2bht<Key, T, Hash, KeyEqual, Scope, Allocator, B>::insert
 //           cuda::thread_scope Scope,
 //           class Allocator,
 //           int B>
-// __device__ bool bght::p2bht<Key, T, Hash, KeyEqual, Scope, Allocator, B>::upsert_generic(
+// __device__ bool bght::p2bht<Key, T, Hash, KeyEqual, Scope, Allocator, B>::upsert_replace(
 //     value_type const& pair,
 //     tile_type const& tile) {
 
@@ -584,7 +584,7 @@ __device__ bool bght::p2bht<Key, T, Hash, KeyEqual, Scope, Allocator, B>::insert
 //           cuda::thread_scope Scope,
 //           class Allocator,
 //           int B>
-// __device__ bool bght::p2bht<Key, T, Hash, KeyEqual, Scope, Allocator, B>::upsert_generic(
+// __device__ bool bght::p2bht<Key, T, Hash, KeyEqual, Scope, Allocator, B>::upsert_replace(
 //     value_type const& pair,
 //     tile_type const& tile) {
 
@@ -750,7 +750,7 @@ template <class Key,
           cuda::thread_scope Scope,
           class Allocator,
           int B>
-__device__ bool bght::p2bht<Key, T, Hash, KeyEqual, Scope, Allocator, B>::upsert_generic(
+__device__ bool bght::p2bht<Key, T, Hash, KeyEqual, Scope, Allocator, B>::upsert_replace(
     value_type const& pair,
     tile_type const& tile) {
 

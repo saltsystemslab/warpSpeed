@@ -1120,7 +1120,6 @@ namespace tables {
          tombstone_match = 0U;
          key_match = 0U;
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1209,15 +1208,11 @@ namespace tables {
 
          //uint4 tags = double_load_multi_tags(metadata);
 
-
-         uint64_t * md_as_uint64_t = (uint64_t *) metadata; 
-
          //wipe previous
          empty_match = 0U;
          tombstone_match = 0U;
          key_match = 0U;
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1291,6 +1286,8 @@ namespace tables {
 
          }
 
+         //printf("Done with load_huge\n");
+
          return;
 
       }
@@ -1315,8 +1312,6 @@ namespace tables {
          empty_match = 0U;
          tombstone_match = 0U;
          key_match = 0U;
-
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1411,7 +1406,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1505,7 +1499,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1597,8 +1590,6 @@ namespace tables {
          uint64_t * md_as_uint64_t = (uint64_t *) metadata; 
 
          //wipe previous
-
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1957,7 +1948,7 @@ namespace tables {
          //uint64_t step = hash(&key, sizeof(Key), seed+1);
 
 
-         for (int i = 0; i < BACK_PROBES; i++){
+         for (int i = 0; i < META_MAX_PROBES; i++){
 
 
             uint64_t bucket_index = (bucket_primary + step*i) % n_buckets;
@@ -2020,7 +2011,7 @@ namespace tables {
          //uint64_t step = hash(&key, sizeof(Key), seed+1);
 
 
-         for (int i = 0; i < BACK_PROBES; i++){
+         for (int i = 0; i < META_MAX_PROBES; i++){
 
 
             uint64_t bucket_index = (bucket_primary + step*i) % n_buckets;
@@ -2468,7 +2459,7 @@ namespace tables {
 
       }
 
-      static char * get_name(){
+      static std::string get_name(){
          return "double_hashing_metadata";
       }
 

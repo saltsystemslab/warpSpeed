@@ -9,7 +9,7 @@
 
 
 
-
+#include <argparse/argparse.hpp>
 
 #include <gallatin/allocators/global_allocator.cuh>
 
@@ -61,66 +61,102 @@ using namespace gallatin::allocators;
    #define TEST_BLOCK_SIZE 256
 #endif
 
+__host__ void execute_test(std::string table, std::string input_file, uint64_t n_indices_output){
+
+   if (table == "p2"){
+
+      tensor_contraction<4,1,hashing_project::tables::p2_ext_generic, 8, 32>(input_file, n_indices_output);
+
+      tensor_contraction<4,3,hashing_project::tables::p2_ext_generic, 8, 32>(input_file, n_indices_output);
+
+      //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
+
+   } else if (table == "p2MD"){
+
+      tensor_contraction<4,1,hashing_project::tables::md_p2_generic, 4, 32>(input_file, n_indices_output);
+
+      tensor_contraction<4,3,hashing_project::tables::md_p2_generic, 4, 32>(input_file, n_indices_output);
+
+
+   } else if (table == "double"){
+
+      tensor_contraction<4,1,hashing_project::tables::double_generic, 4, 8>(input_file, n_indices_output);
+
+      tensor_contraction<4,3,hashing_project::tables::double_generic, 4, 8>(input_file, n_indices_output);
+
+   } else if (table == "doubleMD"){
+
+      tensor_contraction<4,1,hashing_project::tables::md_double_generic, 4, 32>(input_file, n_indices_output);
+
+      tensor_contraction<4,3,hashing_project::tables::md_double_generic, 4, 32>(input_file, n_indices_output);
+
+
+   } else if (table == "iceberg"){
+
+      tensor_contraction<4,1,hashing_project::tables::iht_p2_generic, 8, 32>(input_file, n_indices_output);
+      
+      tensor_contraction<4,3,hashing_project::tables::iht_p2_generic, 8, 32>(input_file, n_indices_output);
+  
+   } else if (table == "icebergMD"){
+
+      tensor_contraction<4,1,hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
+
+      tensor_contraction<4,3,hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
+ 
+   } else if (table == "chaining"){
+
+      tensor_contraction<4,1,hashing_project::tables::chaining_generic, 4, 8>(input_file, n_indices_output, true);
+
+      tensor_contraction<4,3,hashing_project::tables::chaining_generic, 4, 8>(input_file, n_indices_output);
+
+   } else {
+      throw std::runtime_error("Unknown table");
+   }
+
+
+}
 
 
 int main(int argc, char** argv) {
 
+   argparse::ArgumentParser program("sparse_tensor_test");
 
-   std::string input_file = "../dataset/nips.tns";
+   // program.add_argument("square")
+   // .help("display the square of a given integer")
+   // .scan<'i', int>();
 
-   uint64_t n_indices_output = 40000000ULL;
+   program.add_argument("--table", "-t")
+   .required()
+   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
+
+   program.add_argument("--tensor", "-r")
+   .required()
+   .help("Tensor for contraction. Tests both 1 mode and 3 mode contraction on the tensor. .mtx format\n");
+
+
+   program.add_argument("--capacity", "-c").required().scan<'u', uint64_t>().help("Capacity of the output tensor");
+
+   try {
+    program.parse_args(argc, argv);
+   }
+   catch (const std::exception& err) {
+    std::cerr << err.what() << std::endl;
+    std::cerr << program;
+    return 1;
+   }
+
+   auto table = program.get<std::string>("--table");
+   auto input_file = program.get<std::string>("--tensor");
+   uint64_t n_indices_output = program.get<uint64_t>("--capacity");
+
+   execute_test(table, input_file, n_indices_output);
+   //std::string input_file = "../dataset/nips.tns";
+
+   //uint64_t n_indices_output = 40000000ULL;
    //can't give up this space.
    // init_global_allocator(16ULL*1024*1024*1024, 111);
 
-   printf("1 mode\n");
-
-   tensor_contraction<4,1,hashing_project::tables::md_double_generic, 4, 32>(input_file, n_indices_output);
-
-   tensor_contraction<4,1,hashing_project::tables::iht_p2_generic, 8, 32>(input_file, n_indices_output);
   
-
-   tensor_contraction<4,1,hashing_project::tables::md_p2_generic, 4, 32>(input_file, n_indices_output);
-
-   tensor_contraction<4,1,hashing_project::tables::double_generic, 4, 8>(input_file, n_indices_output);
-
-      
-   tensor_contraction<4,1,hashing_project::tables::p2_ext_generic, 8, 32>(input_file, n_indices_output);
-
-   
-
-   
-   tensor_contraction<4,1,hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
-   
-
-
-   tensor_contraction<4,1,hashing_project::tables::chaining_generic, 4, 8>(input_file, n_indices_output, true);
-
-
-   //3 mode
-
-   printf("3 mode\n");
-   tensor_contraction<4,3,hashing_project::tables::md_double_generic, 4, 32>(input_file, n_indices_output);
-
-   tensor_contraction<4,3,hashing_project::tables::iht_p2_generic, 8, 32>(input_file, n_indices_output);
-  
-
-   tensor_contraction<4,3,hashing_project::tables::md_p2_generic, 4, 32>(input_file, n_indices_output);
-
-   tensor_contraction<4,3,hashing_project::tables::double_generic, 4, 8>(input_file, n_indices_output);
-
-      
-   tensor_contraction<4,3,hashing_project::tables::p2_ext_generic, 8, 32>(input_file, n_indices_output);
-
-   
-
-   
-   tensor_contraction<4,3,hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
-   
-
-
-   tensor_contraction<4,3,hashing_project::tables::chaining_generic, 4, 8>(input_file, n_indices_output);
-
-
    cudaDeviceReset();
    return 0;
 

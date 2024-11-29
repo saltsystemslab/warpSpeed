@@ -1085,7 +1085,6 @@ namespace tables {
          tombstone_match = 0U;
          key_match = 0U;
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1172,17 +1171,15 @@ namespace tables {
 
          ADD_PROBE_TILE
 
-         //uint4 tags = load_multi_tags(metadata);
+         //uint4 tags = double_load_multi_tags(metadata);
 
 
-         uint64_t * md_as_uint64_t = (uint64_t *) metadata; 
+         //uint64_t * md_as_uint64_t = (uint64_t *) metadata; 
 
          //wipe previous
          empty_match = 0U;
          tombstone_match = 0U;
          key_match = 0U;
-
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1232,21 +1229,12 @@ namespace tables {
 
                }
 
+               empty_match |= local_empty;
+               tombstone_match |= local_tombstone;
+               key_match |= local_match;
+
             }
 
-            #if LARGE_BUCKET_MODS
-            //cg::reduce(tile, thread_sum, cg::plus<int>()) / length;
-            empty_match |= cg::reduce(my_tile, local_empty, cg::plus<uint64_t>());
-            tombstone_match |= cg::reduce(my_tile, local_tombstone, cg::plus<uint64_t>());
-            key_match |= cg::reduce(my_tile, local_match, cg::plus<uint64_t>());
-
-            #else
-
-            empty_match |= cg::reduce(my_tile, local_empty, cg::plus<uint32_t>());
-            tombstone_match |= cg::reduce(my_tile, local_tombstone, cg::plus<uint32_t>());
-            key_match |= cg::reduce(my_tile, local_match, cg::plus<uint32_t>());
-
-            #endif
 
             // empty_match |= (my_tile.ballot(found_empty) << offset);
             // tombstone_match |= (my_tile.ballot(found_tombstone) << offset);
@@ -1255,6 +1243,24 @@ namespace tables {
             //if (empty_match || key_match) return;
 
          }
+
+         //final reduction
+
+         #if LARGE_BUCKET_MODS
+         //cg::reduce(tile, thread_sum, cg::plus<int>()) / length;
+         empty_match |= cg::reduce(my_tile, empty_match, cg::plus<uint64_t>());
+         tombstone_match |= cg::reduce(my_tile, tombstone_match, cg::plus<uint64_t>());
+         key_match |= cg::reduce(my_tile, key_match, cg::plus<uint64_t>());
+
+         #else
+
+         empty_match |= cg::reduce(my_tile, empty_match, cg::plus<uint32_t>());
+         tombstone_match |= cg::reduce(my_tile, tombstone_match, cg::plus<uint32_t>());
+         key_match |= cg::reduce(my_tile, key_match, cg::plus<uint32_t>());
+
+         #endif
+
+         //printf("Done with load_huge\n");
 
          return;
 
@@ -1280,8 +1286,6 @@ namespace tables {
          empty_match = 0U;
          tombstone_match = 0U;
          key_match = 0U;
-
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1376,8 +1380,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
-
          uint16_t key_tag = get_tag(upsert_key);
 
          for (uint i = my_tile.thread_rank(); i < (n_traversals-1)/4+1; i+=my_tile.size()){
@@ -1470,8 +1472,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
-
          uint16_t key_tag = get_tag(upsert_key);
 
          for (uint i = my_tile.thread_rank(); i < (n_traversals-1)/8+1; i+=my_tile.size()){
@@ -1480,16 +1480,6 @@ namespace tables {
             uint offset = i - my_tile.thread_rank();
 
             bool valid_to_load = i < (bucket_size-1/8)+1;
-
-            
-            //maybe change these
-            #if LARGE_BUCKET_MODS
-            //uint64_t local_empty = 0U;
-            uint64_t local_match = 0U;
-            #else
-            //uint32_t local_empty = 0U;
-            uint32_t local_match = 0U;
-            #endif
 
 
 
@@ -1534,13 +1524,26 @@ namespace tables {
                   }
 
                   int leader = __ffs(my_tile.ballot(found))-1;
-
+                  
                   if (leader != -1){
                      val = my_tile.shfl(val, leader);
                      return true;
                   }
                   
                }
+
+            } else {
+
+               for (uint64_t j = 0; j < 8; j++){
+                  bool found = false;
+                  int leader = __ffs(my_tile.ballot(found))-1;
+
+                  if (leader != -1){
+                     val = my_tile.shfl(val, leader);
+                     return true;
+                  }
+               }
+
 
             }
 
@@ -1563,7 +1566,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1662,7 +1664,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -2970,7 +2971,6 @@ namespace tables {
 
          #endif
 
-
          // uint bucket_0_empty_small;
          // uint bucket_0_tombstone_small;
          // uint bucket_0_match_small;
@@ -3103,7 +3103,6 @@ namespace tables {
             #else
             bucket_0_size = bucket_size - __popc(bucket_0_empty);
             #endif
-
 
             
          }
@@ -3743,7 +3742,7 @@ namespace tables {
 
       }
 
-      static char * get_name(){
+      static std::string get_name(){
          return "p2_hashing_metadata";
       }
 

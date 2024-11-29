@@ -33,7 +33,7 @@ namespace cg = cooperative_groups;
 //query cache
 //on success add to pin?
 //need delete from potential buckets implementation - need to download warpcore...
-//buidld with primary p2bht first.
+//build with primary p2bht first.
 
 
 
@@ -493,7 +493,6 @@ namespace tables {
          tombstone_match = 0U;
          key_match = 0U;
 
-         int my_count = 0;
 
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
@@ -537,7 +536,7 @@ namespace tables {
          tombstone_match = 0U;
          key_match = 0U;
 
-         int my_count = 0;
+
 
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
@@ -623,7 +622,6 @@ namespace tables {
          tombstone_match = 0U;
          key_match = 0U;
 
-         int my_count = 0;
 
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
@@ -2008,7 +2006,7 @@ namespace tables {
 
       }
 
-      static char * get_name(){
+      static std::string get_name(){
          return "iht_p2_hashing";
       }
 

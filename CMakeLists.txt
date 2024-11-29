@@ -66,6 +66,12 @@ CPMAddPackage(
   GIT_TAG origin/main
 )
 
+CPMAddPackage (
+  NAME argparse
+  GITHUB_REPOSITORY p-ranav/argparse
+  GIT_TAG origin/master
+)
+
 set(HT_TESTS_BINARY_DIR "${CMAKE_BINARY_DIR}/tests")
 
 add_subdirectory(BGHT)
@@ -81,6 +87,7 @@ target_link_libraries(hashing_project INTERFACE ssl crypto)
 target_link_libraries(hashing_project INTERFACE warpcore)
 target_link_libraries(hashing_project INTERFACE gallatin)
 target_link_libraries(hashing_project INTERFACE bght)
+target_link_libraries(hashing_project INTERFACE argparse)
 # target_link_libraries(hashing_project INTERFACE slabhash)
 
 #target_link_libraries(hashing_project INTERFACE ssl crypto)

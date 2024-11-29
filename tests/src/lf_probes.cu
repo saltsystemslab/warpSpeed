@@ -9,7 +9,7 @@
 
 
 
-#define COUNT_PROBES 0
+#define COUNT_PROBES 1
 
 #define LOAD_CHEAP 0
 
@@ -1015,7 +1015,7 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
 int main(int argc, char** argv) {
 
 
-   argparse::ArgumentParser program("lf_test");
+   argparse::ArgumentParser program("probe_test");
 
    // program.add_argument("square")
    // .help("display the square of a given integer")
@@ -1023,7 +1023,7 @@ int main(int argc, char** argv) {
 
    program.add_argument("--table", "-t")
    .required()
-   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
+   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining");
 
    program.add_argument("--capacity", "-c").required().scan<'u', uint64_t>().help("Number of slots in the table. Default is 100,000,000");
 
@@ -1042,7 +1042,7 @@ int main(int argc, char** argv) {
    // uint64_t table_capacity;
 
 
-   std::cout << "Running lf test with table " << table << " and " << table_capacity << " slots." << std::endl;
+   std::cout << "Running probe test with table " << table << " and " << table_capacity << " slots." << std::endl;
 
    // if (argc < 2){
    //    table_capacity = 100000000;

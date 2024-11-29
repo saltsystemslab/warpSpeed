@@ -11,7 +11,7 @@
 
 #define LOAD_CHEAP 0
 
-#define MEASURE_INDEPENDENT 1
+#define MEASURE_INDEPENDENT 0
 
 // #define COUNT_PROBES 1
 
@@ -856,7 +856,7 @@ int main(int argc, char** argv) {
 
 
 
-   argparse::ArgumentParser program("sawtooth_test");
+   argparse::ArgumentParser program("scaling_test");
 
    // program.add_argument("square")
    // .help("display the square of a given integer")
@@ -893,6 +893,7 @@ int main(int argc, char** argv) {
 
    double replacement_rate = program.get<double>("--replacement_rate");
 
+   std::cout << "Running aging test (combined measure) with table " << table << " and " << table_capacity << " slots." << std::endl;
 
 
    execute_test(table, table_capacity, n_rounds, init_fill, replacement_rate);

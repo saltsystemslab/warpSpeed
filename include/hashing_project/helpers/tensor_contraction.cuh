@@ -626,6 +626,128 @@ __global__ void contract(coo_matrix<n_dims> * x_mat, ht_type * y_mat, ht_type * 
 }
 
 
+struct data_pair {
+	uint64_t key;
+	uint64_t value;
+
+};
+
+struct local_accumulator {
+
+	data_pair data[2048];
+
+
+};
+
+
+template <int n_dims, int contraction_dims>
+__global__ void determine_header_kernel(coo_matrix<n_dims> * x_mat, uint64_t n_items, uint64_t * n_unique_headers, uint64_t * header_start){
+
+
+	uint64_t tid = gallatin::utils::get_tid();
+
+	if (tid >= n_items) return;
+
+	uint64_t uncontracted_dims = x_mat->get_ht_key(tid, 0, n_dims-contraction_dims);
+
+	if (tid != 0){
+
+
+   	uint64_t prev_dims = x_mat->get_ht_key(tid-1, 0, n_dims-contraction_dims);
+
+   	if (prev_dims != uncontracted_dims) return;
+
+	}
+
+	//all indices left are valid.
+
+	uint64_t my_index = atomicAdd((unsigned long long int *)n_unique_headers, 1ULL);
+
+	header_start[my_index] = tid;
+
+
+
+}
+
+template <typename ht_type, typename vector_type, int n_dims, int contraction_dims, int output_dims, uint tile_size>
+__global__ void local_contract(coo_matrix<n_dims> * x_mat, ht_type * y_mat, coo_matrix<output_dims> * output){
+
+	__shared__ local_accumulator acc;
+
+
+	uint64_t starting_index = blockIdx.x;
+
+	auto thread_block = cg::this_thread_block();
+
+   cg::thread_block_tile<tile_size> my_tile = cg::tiled_partition<tile_size>(thread_block);
+
+
+   uint64_t team_tid = threadIdx.x/tile_size;
+
+   uint64_t team_step_size = (blockDim.x-1)/tile_size+1;
+
+   if (starting_index >= x_mat->n_items) return;
+
+
+   uint64_t uncontracted_dims = x_mat->get_ht_key(starting_index, 0, n_dims-contraction_dims);
+
+   if (starting_index != 0){
+
+   	//check if previous index is conflict...
+   	//if so drop.
+   	//how long does this take?
+   	uint64_t prev_dims = x_mat->get_ht_key(starting_index-1, 0, n_dims-contraction_dims);
+
+   	if (prev_dims != uncontracted_dims) return;
+
+   }
+
+
+   uint64_t currrent_index = starting_index+team_tid;
+
+   while (x_mat->get_ht_key(currrent_index, 0, n_dims-contraction_dims) == uncontracted_dims){
+
+
+   	uint64_t hash_key = x_mat->get_ht_key(currrent_index, n_dims-contraction_dims, contraction_dims);
+
+   	uint64_t allocation;
+
+	   if (!y_mat->find_with_reference_no_lock(my_tile, hash_key, allocation)) return;
+
+	   vector_type * vector = (vector_type *) allocation;
+
+	   auto lhs = x_mat->items[currrent_index];
+
+	   currrent_index += team_step_size;
+
+
+	   for (int i = 0; i < vector->size; i++){
+
+	   	auto rhs = vector->data[i];
+
+	   	uint64_t merged_key = output->get_output_key(lhs, contraction_dims, rhs);
+
+	   	uint64_t value = rhs.value*lhs.value;
+
+	   	if (my_tile.thread_rank() == 0){
+
+
+	   		atomicAdd((unsigned long long int *)&acc.data[merged_key % 1024], (unsigned long long int) value);
+	   	}
+	   	
+
+   	}
+
+
+
+	}
+
+   //separate.
+
+
+}
+
+
 template <int n_dims, int contraction_dims, template<typename, typename, uint, uint> typename hash_table_type, uint tile_size, uint bucket_size>
 __host__ void tensor_contraction(std::string filename, uint64_t accumulator_nslots, bool table_uses_allocator=false){
 
@@ -708,7 +830,9 @@ __host__ void tensor_contraction(std::string filename, uint64_t accumulator_nslo
 
 	cudaDeviceSynchronize();
 
+
 	printf("%s starting\n", ht_type::get_name());
+
 
 	gallatin::utils::timer convert_timing;
 
@@ -730,6 +854,37 @@ __host__ void tensor_contraction(std::string filename, uint64_t accumulator_nslo
 	//store final output as full tensors in vector. inputCOO + outputCOO yields high dimension output.
 
 	//run 4 way tensor hash - yield exact key that maps to value.
+
+	// uint64_t * n_unique_headers;
+
+	// uint64_t * header_start = gallatin::utils::get_device_version<uint64_t>(x_mat.n_items);
+
+	//determine the slipping points?
+
+
+	// cudaMallocManaged((void **)&n_unique_headers, sizeof(uint64_t));
+
+	// n_unique_headers[0] = 0;
+
+
+
+	//cudaDeviceSynchronize();
+
+
+
+	// gallatin::utils::timer alt_comp_timing;
+
+	// determine_header_kernel<n_dims, contraction_dims><<<(x_mat.n_items-1)/256+1, 256>>>(x_mat_device, x_mat.n_items, n_unique_headers, header_start);
+
+
+	// //local_contract<ht_type, vector_type, n_dims, contraction_dims, output_dims, tile_size><<<x_mat.n_items*256,256>>>(x_mat_device, indirection_table, output_mat_device);
+
+
+	// alt_comp_timing.sync_end();
+
+	// alt_comp_timing.print_throughput("Alt loaded", x_mat.n_items);
+
+	// printf("%lu headers\n", n_unique_headers[0]);
 
 	cudaDeviceSynchronize();
 

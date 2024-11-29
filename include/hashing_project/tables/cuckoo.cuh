@@ -489,7 +489,6 @@ template <typename HT, uint tile_size>
          tombstone_match = 0U;
          key_match = 0U;
 
-         int my_count = 0;
 
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
@@ -533,8 +532,7 @@ template <typename HT, uint tile_size>
          //wipe previous
          key_match = 0U;
 
-         int my_count = 0;
-
+         
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
             ADD_PROBE_ADJUSTED
@@ -581,7 +579,6 @@ template <typename HT, uint tile_size>
          tombstone_match = 0U;
 
 
-         int my_count = 0;
 
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
@@ -820,6 +817,8 @@ template <typename HT, uint tile_size>
       
 
    }
+
+
 
 
 
@@ -1435,7 +1434,7 @@ template <typename HT, uint tile_size>
          if (upserted) return true;
 
 
-         int n_iters = 0;
+         //int n_iters = 0;
 
          vector_type * my_vector = &data_vectors[my_tile.meta_group_rank()];
 
@@ -2472,7 +2471,7 @@ template <typename HT, uint tile_size>
 
       }
 
-      static char * get_name(){
+      static std::string get_name(){
          return "cuckoo_hashing";
       }
 
@@ -2527,6 +2526,17 @@ template <typename HT, uint tile_size>
 
          return bucket_size-__popc(bucket_empty) - __popc(bucket_tombstone);
 
+      }
+
+      __host__ uint64_t get_num_locks(){
+
+         my_type * host_version = gallatin::utils::copy_to_host<my_type>(this);
+
+         uint64_t nblocks = host_version->n_buckets_primary;
+
+         cudaFreeHost(host_version);
+
+         return nblocks;
       }
 
 

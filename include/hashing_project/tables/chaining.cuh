@@ -1577,7 +1577,7 @@ namespace tables {
          cudaFree(avg);
       }
 
-      static char * get_name(){
+      static std::string get_name(){
          return "chaining_table";
       }
 

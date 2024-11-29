@@ -17,7 +17,7 @@ All functions come with a lockless variant for constructing compound operations.
 
 # Tables
 ------------------
-Tables can be found in `include/hashing_project/tables`. The following tables are implemented
+Tables can be found in `include/hashing_project/tables`. The following tables are implemented:
 
 -  `Chaining`
 -  `Cuckoo`
@@ -32,8 +32,19 @@ Tables can be found in `include/hashing_project/tables`. The following tables ar
 #Benchmarks
 ------------------
 
+Each benchmark tests one component of hash table paper. The tests are all executed with the same argument system, and `-h` or `--help` can be passed to see the exact parameters of each benchmark.
+
+The following benchmarks are included.
+
 - `lf_test`: Load benchmark in the paper, tests the perfomance of the table from 5%-90% load.
-- `sawtooth_test`: Aging benchmark in the paper, tests performance as the table has 1000 slices of data iteratively inserted/removed. Table is held at 85% load for the duration of the benchmark.
-- `looped_cache_test`: Cache benchmark in the paper - tests the performance of the table when used for CPU-GPU data caching.
-- `sparse_tensor_test`: Tests 1 and 3 mode contraction of a tensor with itself. The NIPS tensor is provided in the `dataset` folder. (must be unzipped first)
+- `lf_probe`: Load benchmark but measure the # of cache line touches performed in each operation
+- `phased_test`: Executes all tables in a bulk-synchronous format, with concurency loads and locking disabled. Functionally identical to the `lf_test` but with BSP optimizations enabled.
+- `phased_probes`: Executes all tables in a bulk-synchronous format, with concurency loads and locking disabled. Measures # of cache line touches per table.
+- `scaling_test`: Scaling benchmark in the paper. Measures performance of all tables from 5-90% load as the table is scaled in size. Default settings measure performance at 90% load as the table scales from 10,000,000 key-value pairs to 1,000,000,000 key-value pairs.
+- `tile_combination_test`: Tile-bucket exhaustive benchmark from the paper. Executes `lf_test` with default parameters on every possible combination of bucket and tile size for all tables, and records the aggregate performance results of all operations at 90% load factor.
+- `aging_independent`: Aging benchmark in the paper, tests performance as the table has 1000 slices of data iteratively inserted/removed. Table is held at 85% load for the duration of the benchmark. This variant measures the performance of each operation independently by executing them in separate kernels.
+- `aging_probes`: Aging benchmark in the paper, tests performance as the table has 1000 slices of data iteratively inserted/removed. Table is held at 85% load for the duration of the benchmark. This variant measures the # of cache line touches by each operation, and executes the operations in independent kernels.
+- `aging_combined`: Aging benchmark in the paper, tests performance as the table has 1000 slices of data iteratively inserted/removed. Table is held at 85% load for the duration of the benchmark. This variant measures perromance per-iteration of all operations combined into one aggregate result. All operations are executed in the same kernel.
+- `cache_test`: Tests the performance of each table as the GPU storage component of a basic CPU-GPU cache. Perforamnce recorded is aggregate performance of the entire cache.
+- `sparse_tensor_test`: Tests 1 and 3 mode contraction of a tensor with itself. The NIPS tensor is provided in a zipped format in the `dataset` folder. Additional tensors are available in the FROSTT dataset at http://frostt.io/tensors/. Any tensor can be executed but the test requires that tensors are provided in the COO matrix market (.mtx) format.
 - `adversarial_test`: Runs the adversarial benchmark from the paper. This replays an attack on every bucket in a table. The attack attempts to trigger a race condition between insertion and deletion and exploit this race to emplace two copies of a key into a bucket. 

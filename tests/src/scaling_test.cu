@@ -13,6 +13,9 @@
 
 #define LOAD_CHEAP 0
 
+#include <argparse/argparse.hpp>
+
+
 #include <gallatin/allocators/global_allocator.cuh>
 
 #include <gallatin/allocators/timer.cuh>
@@ -106,7 +109,7 @@ __host__ T * generate_data(uint64_t nitems){
 
    }
 
-   printf("Generation done\n");
+   //printf("Generation done\n");
    return vals;
 }
 
@@ -353,9 +356,9 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern, std::ofstr
 
       ht_type::free_on_device(table);
 
-      insert_timer.print_throughput("Inserted", items_to_insert);
-      query_timer.print_throughput("Queried", items_to_insert);
-      remove_timer.print_throughput("Removed", items_to_insert);
+      // insert_timer.print_throughput("Inserted", items_to_insert);
+      // query_timer.print_throughput("Queried", items_to_insert);
+      // remove_timer.print_throughput("Removed", items_to_insert);
 
       #if COUNT_PROBES
 
@@ -369,7 +372,7 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern, std::ofstr
 
       #endif
 
-      printf("Misses: %lu %lu %lu\n", misses[0], misses[1], misses[2]);
+      //printf("Misses: %lu %lu %lu\n", misses[0], misses[1], misses[2]);
 
       misses[0] = 0;
       misses[1] = 0;
@@ -393,7 +396,7 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern, std::ofstr
 
 
 template <template<typename, typename, uint, uint> typename hash_table_type, uint tile_size, uint bucket_size>
-__host__ void run_scaling(uint64_t n_items_start, uint64_t n_rounds, int scaling_factor, DATA_TYPE * access_pattern){
+__host__ void run_scaling(uint64_t n_items_start, uint32_t n_rounds, uint32_t scaling_factor, DATA_TYPE * access_pattern){
 
    using ht_type = hash_table_type<DATA_TYPE, DATA_TYPE, tile_size, bucket_size>;
 
@@ -412,7 +415,7 @@ __host__ void run_scaling(uint64_t n_items_start, uint64_t n_rounds, int scaling
    filename = filename + ht_type::get_name() + ".txt";
 
 
-   printf("Writing to %s\n", filename.c_str());
+   //printf("Writing to %s\n", filename.c_str());
    //write to output
 
    std::ofstream myfile;
@@ -427,7 +430,7 @@ __host__ void run_scaling(uint64_t n_items_start, uint64_t n_rounds, int scaling
    filename = filename + ht_type::get_name() + ".txt";
 
 
-   printf("Writing to %s\n", filename.c_str());
+   //printf("Writing to %s\n", filename.c_str());
    //write to output
 
    std::ofstream myfile;
@@ -453,95 +456,182 @@ __host__ void run_scaling(uint64_t n_items_start, uint64_t n_rounds, int scaling
 }
 
 
+__host__ void execute_test(std::string table, uint64_t table_capacity, uint32_t n_rounds, uint32_t scaling_factor){
+
+   uint64_t max_items = table_capacity * std::pow(scaling_factor, n_rounds-1);
+
+   auto access_pattern = generate_data<DATA_TYPE>(max_items);
+
+   if (table == "p2"){
+
+      run_scaling<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+
+      //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
+
+
+   } else if (table == "p2MD"){
+
+      run_scaling<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+
+   } else if (table == "double"){
+      run_scaling<hashing_project::tables::double_generic, 8, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+
+   } else if (table == "doubleMD"){
+
+      run_scaling<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+
+
+   } else if (table == "iceberg"){
+
+      run_scaling<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+     
+   } else if (table == "icebergMD"){
+
+      run_scaling<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+
+   } else if (table == "cuckoo") {
+       run_scaling<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+   
+   } else if (table == "chaining"){
+
+      init_global_allocator(30ULL*1024*1024*1024, 111);
+
+      run_scaling<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+
+      free_global_allocator();
+   } else {
+      throw std::runtime_error("Unknown table");
+   }
+
+
+
+   cudaFreeHost(access_pattern);
+}
+
 int main(int argc, char** argv) {
 
-   uint64_t table_capacity;
 
-   int n_rounds;
+   argparse::ArgumentParser program("scaling_test");
 
-   int scaling_factor;
+   // program.add_argument("square")
+   // .help("display the square of a given integer")
+   // .scan<'i', int>();
 
-   if (argc < 2){
-      table_capacity = 1000000;
-   } else {
-      table_capacity = std::stoull(argv[1]);
+   program.add_argument("--table", "-t")
+   .required()
+   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining");
+
+   program.add_argument("--capacity", "-c").required().scan<'u', uint64_t>().help("Number of slots in the table.");
+
+   program.add_argument("--rounds", "-r").required().scan<'u', uint32_t>().help("Number of rounds to execute. Each round increases number of items by scaling factor");
+
+   program.add_argument("--scaling_factor", "-s").required().scan<'u', uint32_t>().help("Multiplicative increase in size of table per round.");
+
+
+   try {
+    program.parse_args(argc, argv);
+   }
+   catch (const std::exception& err) {
+    std::cerr << err.what() << std::endl;
+    std::cerr << program;
+    return 1;
    }
 
-   if (argc < 3){
-      n_rounds = 3;
-   } else {
-      n_rounds = std::stoull(argv[2]);
-   }
+   auto table = program.get<std::string>("--table");
+   auto table_capacity = program.get<uint64_t>("--capacity");
+
+   uint32_t n_rounds = program.get<uint32_t>("--rounds");
+
+   uint32_t scaling_factor = program.get<uint32_t>("--scaling_factor");
+
+   std::cout << "Running scaling test with table " << table << " and " << table_capacity << " slots and " << n_rounds << " rounds with scaling factor " << scaling_factor << std::endl;
+
+   // int n_rounds;
+
+   // int scaling_factor;
+
+   // if (argc < 2){
+   //    table_capacity = 1000000;
+   // } else {
+   //    table_capacity = std::stoull(argv[1]);
+   // }
+
+   // if (argc < 3){
+   //    n_rounds = 3;
+   // } else {
+   //    n_rounds = std::stoull(argv[2]);
+   // }
 
 
-   if (argc < 4){
-      scaling_factor = 10;
-   } else {
-      scaling_factor = std::stoull(argv[3]);
-   }
+   // if (argc < 4){
+   //    scaling_factor = 10;
+   // } else {
+   //    scaling_factor = std::stoull(argv[3]);
+   // }
 
 
    if(fs::create_directory("results")){
-    std::cout << "Created a directory\n";
+    //std::cout << "Created a directory\n";
    } else {
-    std::cerr << "Failed to create a directory\n";
+    //std::cerr << "Failed to create a directory\n";
    }
 
    if(fs::create_directory("results/scaling")){
-    std::cout << "Created a directory\n";
+    //std::cout << "Created a directory\n";
    } else {
-    std::cerr << "Failed to create a directory\n";
+    //std::cerr << "Failed to create a directory\n";
    }
 
 
    #if COUNT_PROBES
 
    if(fs::create_directory("results/scaling_probe")){
-    std::cout << "Created a directory\n";
+    //std::cout << "Created a directory\n";
    } else {
-    std::cerr << "Failed to create a directory\n";
+    //std::cerr << "Failed to create a directory\n";
    }
 
    #endif
 
+   execute_test(table, table_capacity, n_rounds, scaling_factor);
 
-   uint64_t max_items = table_capacity * std::pow(scaling_factor, n_rounds-1);
+  //  uint64_t max_items = table_capacity * std::pow(scaling_factor, n_rounds-1);
 
-   auto access_pattern = generate_data<DATA_TYPE>(max_items);
+  //  auto access_pattern = generate_data<DATA_TYPE>(max_items);
    
-   run_scaling<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
-   run_scaling<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
-   run_scaling<hashing_project::tables::double_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<hashing_project::tables::double_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
-   run_scaling<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
-   run_scaling<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
-
-
-   run_scaling<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
 
-   run_scaling<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+
+
+  //  run_scaling<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
    
-   init_global_allocator(30ULL*1024*1024*1024, 111);
+  //  init_global_allocator(30ULL*1024*1024*1024, 111);
 
-   run_scaling<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
-   free_global_allocator();
+  //  free_global_allocator();
 
-   cudaDeviceSynchronize();
+  //  cudaDeviceSynchronize();
    
 
-  // lf_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
+  // // lf_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
    
   
 
-   //lf_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, access_pattern);
+  //  //lf_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, access_pattern);
 
 
-   cudaFreeHost(access_pattern);
+  //  cudaFreeHost(access_pattern);
 
 
 

@@ -11,7 +11,7 @@
 
 #define COUNT_PROBES 0
 
-#define LOAD_CHEAP 0
+#define LOAD_CHEAP 1
 
 #include <argparse/argparse.hpp>
 
@@ -308,44 +308,33 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
    misses[3] = 0;
 
 
-   #if COUNT_PROBES
 
-   #if LOAD_CHEAP
-      std::string filename = "results/lf_probe_bght/";
-   #else
-      std::string filename = "results/lf_probe/";
-   #endif
+   //printf("Writing to %s\n", filename.c_str());
+   //write to output
+
+
+   std::string filename = "results/combinations/";
 
    filename = filename + ht_type::get_name() + ".txt";
+
+   bool newfile = !std::filesystem::exists(filename);
 
 
    //printf("Writing to %s\n", filename.c_str());
    //write to output
 
    std::ofstream myfile;
-   myfile.open (filename.c_str());
-   myfile << "lf,insert,query,remove\n";
+  
+
+   if (newfile){
+      myfile.open (filename.c_str());
+      myfile << "config,insert,query,remove,avg\n";
+   } else {
+      myfile.open (filename.c_str(),std::ios_base::app);
+   }
+  
 
 
-   #else
-
-   #if LOAD_CHEAP
-      std::string filename = "results/lf_bght/";
-   #else
-      std::string filename = "results/lf/";
-   #endif
-
-   filename = filename + ht_type::get_name() + ".txt";
-
-
-   //printf("Writing to %s\n", filename.c_str());
-   //write to output
-
-   std::ofstream myfile;
-   myfile.open (filename.c_str());
-   myfile << "lf,insert,query,remove\n";
-
-   #endif
 
   
 
@@ -421,18 +410,6 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
       // query_timer.print_throughput("Queried", items_to_insert);
       // remove_timer.print_throughput("Removed", items_to_insert);
 
-      #if COUNT_PROBES
-
-      //printf("Probes %llu %llu %llu\n", insert_probes, query_probes, remove_probes);
-    
-      myfile << lf << "," << std::setprecision(12) << 1.0*insert_probes/items_to_insert << "," << 1.0*query_probes/items_to_insert << "," << 1.0*remove_probes/items_to_insert << "\n";
-
-      #else
-
-      myfile << lf << "," << std::setprecision(12) << 1.0*items_to_insert/(insert_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(query_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(remove_timer.elapsed()*1000000) << "\n";
-
-      #endif
-
       //printf("Misses: %lu %lu %lu\n", misses[0], misses[1], misses[2]);
 
       // misses[0] = 0;
@@ -451,7 +428,13 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
 
    }
 
+
+
    double avg_throughput = (avg_insert_throughput+avg_query_throughput+avg_delete_throughput)/3;
+
+
+
+   myfile << tile_size << "-" << bucket_size << "," << std::setprecision(12) << avg_insert_throughput << "," << avg_query_throughput << "," << avg_delete_throughput << "," << avg_throughput << "\n";
 
    //printf("%u-%u Avg operations throughput %f\n", bucket_size, tile_size, avg_throughput);
 
@@ -486,44 +469,25 @@ __host__ void lf_test_combo_cuckoo(uint64_t n_indices, DATA_TYPE * access_patter
    misses[3] = 0;
 
 
-   #if COUNT_PROBES
-
-   #if LOAD_CHEAP
-      std::string filename = "results/lf_probe_bght/";
-   #else
-      std::string filename = "results/lf_probe/";
-   #endif
+   std::string filename = "results/combinations/";
 
    filename = filename + ht_type::get_name() + ".txt";
+
+   bool newfile = !std::filesystem::exists(filename);
 
 
    //printf("Writing to %s\n", filename.c_str());
    //write to output
 
    std::ofstream myfile;
-   myfile.open (filename.c_str());
-   myfile << "lf,insert,query,remove\n";
+  
 
-
-   #else
-
-   #if LOAD_CHEAP
-      std::string filename = "results/lf_bght/";
-   #else
-      std::string filename = "results/lf/";
-   #endif
-
-   filename = filename + ht_type::get_name() + ".txt";
-
-
-   //printf("Writing to %s\n", filename.c_str());
-   //write to output
-
-   std::ofstream myfile;
-   myfile.open (filename.c_str());
-   myfile << "lf,insert,query,remove\n";
-
-   #endif
+   if (newfile){
+      myfile.open (filename.c_str());
+      myfile << "config,insert,query,remove,avg\n";
+   } else {
+      myfile.open (filename.c_str(),std::ios_base::app);
+   }
 
   
 
@@ -599,18 +563,6 @@ __host__ void lf_test_combo_cuckoo(uint64_t n_indices, DATA_TYPE * access_patter
       // query_timer.print_throughput("Queried", items_to_insert);
       // remove_timer.print_throughput("Removed", items_to_insert);
 
-      #if COUNT_PROBES
-
-      //printf("Probes %llu %llu %llu\n", insert_probes, query_probes, remove_probes);
-    
-      myfile << lf << "," << std::setprecision(12) << 1.0*insert_probes/items_to_insert << "," << 1.0*query_probes/items_to_insert << "," << 1.0*remove_probes/items_to_insert << "\n";
-
-      #else
-
-      myfile << lf << "," << std::setprecision(12) << 1.0*items_to_insert/(insert_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(query_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(remove_timer.elapsed()*1000000) << "\n";
-
-      #endif
-
       //printf("Misses: %lu %lu %lu\n", misses[0], misses[1], misses[2]);
 
       // misses[0] = 0;
@@ -634,6 +586,8 @@ __host__ void lf_test_combo_cuckoo(uint64_t n_indices, DATA_TYPE * access_patter
    // printf("%u-%u Avg operations throughput %f\n", bucket_size, tile_size, avg_throughput);
    // printf("Misses: %lu %lu %lu\n", misses[0], misses[1], misses[2]);
 
+   myfile << tile_size << "-" << bucket_size << "," << std::setprecision(12) << avg_insert_throughput << "," << avg_query_throughput << "," << avg_delete_throughput << "," << avg_throughput << "\n";
+
 
    myfile.close();
  
@@ -648,7 +602,7 @@ template<template<typename, typename, uint, uint> typename hash_table_type>
 __host__ void test_all_combinations(uint64_t n_indices, DATA_TYPE * access_pattern){
 
    //fill out arguments with junk to get static type
-   std::cout << "Table: " << hash_table_type<uint64_t, uint64_t, 1,1>::get_name() << std::endl;
+   //std::cout << "Table: " << hash_table_type<uint64_t, uint64_t, 1,1>::get_name() << std::endl;
    lf_test<hash_table_type, 1,4>(n_indices, access_pattern);
    lf_test<hash_table_type, 2,4>(n_indices, access_pattern);
    lf_test<hash_table_type, 4,4>(n_indices, access_pattern);
@@ -674,7 +628,7 @@ template<template<typename, typename, uint, uint> typename hash_table_type>
 __host__ void test_all_combinations_cuckoo(uint64_t n_indices, DATA_TYPE * access_pattern){
 
    //fill out arguments with junk to get static type
-   std::cout << "Table: " << hash_table_type<uint64_t, uint64_t, 1,1>::get_name() << std::endl;
+   //std::cout << "Table: " << hash_table_type<uint64_t, uint64_t, 1,1>::get_name() << std::endl;
    lf_test_combo_cuckoo<hash_table_type, 1,4>(n_indices, access_pattern);
    lf_test_combo_cuckoo<hash_table_type, 2,4>(n_indices, access_pattern);
    lf_test_combo_cuckoo<hash_table_type, 4,4>(n_indices, access_pattern);
@@ -700,7 +654,7 @@ template<template<typename, typename, uint, uint> typename hash_table_type>
 __host__ void test_all_combinations_md(uint64_t n_indices, DATA_TYPE * access_pattern){
 
    //fill out arguments with junk to get static type
-   std::cout << "Table: " << hash_table_type<uint64_t, uint64_t, 1,1>::get_name() << std::endl;
+   //std::cout << "Table: " << hash_table_type<uint64_t, uint64_t, 1,1>::get_name() << std::endl;
    // lf_test<hash_table_type, 1,4>(n_indices, access_pattern);
    // lf_test<hash_table_type, 2,4>(n_indices, access_pattern);
    // lf_test<hash_table_type, 4,4>(n_indices, access_pattern);
@@ -966,39 +920,39 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
 
    if (table == "p2"){
 
-      lf_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, access_pattern);
+      test_all_combinations<hashing_project::tables::p2_ext_generic>(table_capacity, access_pattern);
 
       //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
 
    } else if (table == "p2MD"){
 
-      lf_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, access_pattern);
+      test_all_combinations_md<hashing_project::tables::md_p2_generic>(table_capacity, access_pattern);
 
    } else if (table == "double"){
-      lf_test<hashing_project::tables::double_generic, 8, 8>(table_capacity, access_pattern);
+      test_all_combinations<hashing_project::tables::double_generic>(table_capacity, access_pattern);
 
    } else if (table == "doubleMD"){
 
-      lf_test<hashing_project::tables::md_double_generic, 4, 32>(table_capacity,access_pattern);
+      test_all_combinations_md<hashing_project::tables::md_double_generic>(table_capacity,access_pattern);
 
 
    } else if (table == "iceberg"){
 
-      lf_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
+      test_all_combinations<hashing_project::tables::iht_p2_generic>(table_capacity, access_pattern);
      
    } else if (table == "icebergMD"){
 
-      lf_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, access_pattern);
+      test_all_combinations_md<hashing_project::tables::iht_p2_metadata_full_generic>(table_capacity, access_pattern);
 
    } else if (table == "cuckoo") {
-       lf_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, access_pattern);
+       test_all_combinations_cuckoo<hashing_project::tables::cuckoo_generic>(table_capacity, access_pattern);
    
    } else if (table == "chaining"){
 
       init_global_allocator(30ULL*1024*1024*1024, 111);
 
-      lf_test<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, access_pattern);
+      test_all_combinations<hashing_project::tables::chaining_generic>(table_capacity, access_pattern);
 
       free_global_allocator();
    } else {
@@ -1015,7 +969,7 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
 int main(int argc, char** argv) {
 
 
-   argparse::ArgumentParser program("lf_test");
+   argparse::ArgumentParser program("combination_test");
 
    // program.add_argument("square")
    // .help("display the square of a given integer")
@@ -1023,7 +977,7 @@ int main(int argc, char** argv) {
 
    program.add_argument("--table", "-t")
    .required()
-   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
+   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining");
 
    program.add_argument("--capacity", "-c").required().scan<'u', uint64_t>().help("Number of slots in the table. Default is 100,000,000");
 
@@ -1042,7 +996,7 @@ int main(int argc, char** argv) {
    // uint64_t table_capacity;
 
 
-   std::cout << "Running lf test with table " << table << " and " << table_capacity << " slots." << std::endl;
+   std::cout << "Running combination test with table " << table << " and " << table_capacity << " slots." << std::endl;
 
    // if (argc < 2){
    //    table_capacity = 100000000;
@@ -1063,39 +1017,11 @@ int main(int argc, char** argv) {
     //std::cerr << "Failed to create a directory\n";
    }
 
-   if(fs::create_directory("results/lf")){
+   if(fs::create_directory("results/combinations")){
     //std::cout << "Created a directory\n";
    } else {
     //std::cerr << "Failed to create a directory\n";
    }
-
-
-   #if COUNT_PROBES
-
-   if(fs::create_directory("results/lf_probe")){
-    //std::cout << "Created a directory\n";
-   } else {
-    //std::cerr << "Failed to create a directory\n";
-   }
-
-   #endif
-
-   if(fs::create_directory("results/lf_bght")){
-    //std::cout << "Created a directory\n";
-   } else {
-    //std::cerr << "Failed to create a directory\n";
-   }
-
-
-   #if COUNT_PROBES
-
-   if(fs::create_directory("results/lf_probe_bght")){
-    //std::cout << "Created a directory\n";
-   } else {
-    //std::cerr << "Failed to create a directory\n";
-   }
-
-   #endif
 
 
    execute_test(table, table_capacity);

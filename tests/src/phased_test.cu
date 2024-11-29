@@ -11,7 +11,7 @@
 
 #define COUNT_PROBES 0
 
-#define LOAD_CHEAP 0
+#define LOAD_CHEAP 1
 
 #include <argparse/argparse.hpp>
 
@@ -1001,6 +1001,14 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
       lf_test<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, access_pattern);
 
       free_global_allocator();
+   } else if (table == "bght_p2"){
+
+      lf_test_BGHT<bght::bcht8, 8>(table_capacity, access_pattern, "bcht_8");
+
+   } else if (table == "bght_cuckoo"){
+
+      lf_test_BGHT<bght::p2bht32, 32>(table_capacity, access_pattern, "p2bht_32");
+
    } else {
       throw std::runtime_error("Unknown table");
    }
@@ -1015,7 +1023,7 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
 int main(int argc, char** argv) {
 
 
-   argparse::ArgumentParser program("lf_test");
+   argparse::ArgumentParser program("phased_test");
 
    // program.add_argument("square")
    // .help("display the square of a given integer")
@@ -1042,7 +1050,7 @@ int main(int argc, char** argv) {
    // uint64_t table_capacity;
 
 
-   std::cout << "Running lf test with table " << table << " and " << table_capacity << " slots." << std::endl;
+   std::cout << "Running phased test with table " << table << " and " << table_capacity << " slots." << std::endl;
 
    // if (argc < 2){
    //    table_capacity = 100000000;

@@ -28,7 +28,7 @@ namespace cg = cooperative_groups;
 
 // a pointer list managing a set section of device memory
 
-#define BACK_PROBES 20
+#define DOUBLE_BACK_PROBES 80
 
 #define MEASURE_INSERTS 1
 #define MEASURE_LOCKS 1
@@ -421,8 +421,6 @@ namespace tables {
          empty_match = 0U;
          tombstone_match = 0U;
          key_match = 0U;
-
-         int my_count = 0;
 
          for (uint i = my_tile.thread_rank(); i < n_traversals; i+=my_tile.size()){
 
@@ -1058,7 +1056,7 @@ namespace tables {
          //uint64_t step = hash(&key, sizeof(Key), seed+1);
 
 
-         for (int i = 0; i < BACK_PROBES; i++){
+         for (int i = 0; i < DOUBLE_BACK_PROBES; i++){
 
 
             uint64_t bucket_index = (bucket_primary + step*i) % n_buckets_primary;
@@ -1122,7 +1120,7 @@ namespace tables {
          //uint64_t step = hash(&key, sizeof(Key), seed+1);
 
 
-         for (int i = 0; i < BACK_PROBES; i++){
+         for (int i = 0; i < DOUBLE_BACK_PROBES; i++){
 
 
             uint64_t bucket_index = (bucket_primary + step*i) % n_buckets_primary;
@@ -1159,7 +1157,7 @@ namespace tables {
          //uint64_t step = hash(&key, sizeof(Key), seed+1);
 
 
-         for (int i = 0; i < BACK_PROBES; i++){
+         for (int i = 0; i < DOUBLE_BACK_PROBES; i++){
 
 
             uint64_t bucket_index = (bucket_primary + step*i) % n_buckets_primary;
@@ -1414,7 +1412,7 @@ namespace tables {
 
       }
 
-      static char * get_name(){
+      static std::string get_name(){
          return "double_hashing";
       }
 

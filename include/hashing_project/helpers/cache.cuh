@@ -138,7 +138,7 @@ namespace hashing_project {
       uint64_t cache_capacity;
       int live_items;
 
-      static char * get_name(){
+      static std::string get_name(){
         return ht_type::get_name();
       }
 
@@ -155,7 +155,7 @@ namespace hashing_project {
 
          //cudaMemcpy(dev_table, &host_map, sizeof(ht_type), cudaMemcpyHostToDevice);'
 
-         printf("Starting test with hash table %s\n", ht_type::get_name());
+         //std::cout << "Starting test with hash table " << ht_type::get_name() << std::endl; 
 
          host_version->map = ht_type::generate_on_device(ext_cache_capacity, 424242ULL);
 
@@ -351,7 +351,7 @@ namespace hashing_project {
 
          host_version->map->print_space_usage();
 
-         printf("Cache using %llu\n", host_version->host_capacity*(16));
+         //printf("Cache using %llu\n", host_version->host_capacity*(16));
             
          //uint64_t capacity = host_version->n_buckets*(sizeof(bucket_type)+sizeof(md_bucket_type)) + (host_version->n_buckets-1)/8+1; 
 

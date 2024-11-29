@@ -13,6 +13,8 @@
 
 #define LOAD_CHEAP 0
 
+#include <argparse/argparse.hpp>
+
 #include <gallatin/allocators/global_allocator.cuh>
 
 #include <gallatin/allocators/timer.cuh>
@@ -36,9 +38,9 @@
 namespace fs = std::filesystem;
 
 
-#include <hashing_project/table_wrappers/p2_wrapper.cuh>
-#include <hashing_project/table_wrappers/dummy_ht.cuh>
-#include <hashing_project/table_wrappers/iht_wrapper.cuh>
+//#include <hashing_project/table_wrappers/p2_wrapper.cuh>
+//#include <hashing_project/table_wrappers/dummy_ht.cuh>
+//#include <hashing_project/table_wrappers/iht_wrapper.cuh>
 #include <hashing_project/table_wrappers/warpcore_wrapper.cuh>
 #include <hashing_project/tables/p2_hashing_external.cuh>
 #include <hashing_project/tables/p2_hashing_internal.cuh>
@@ -47,6 +49,8 @@ namespace fs = std::filesystem;
 #include <hashing_project/tables/chaining.cuh>
 #include <hashing_project/tables/p2_hashing_metadata.cuh>
 #include <hashing_project/tables/cuckoo.cuh>
+#include <hashing_project/tables/double_hashing_metadata.cuh>
+#include <hashing_project/tables/iht_p2_metadata_full.cuh>
 
 #include <slabhash/gpu_hash_table.cuh>
 
@@ -633,7 +637,7 @@ __host__ void test_table(uint64_t n_buckets){
    using ht_type = hash_table_type<uint32_t, uint32_t, tile_size, bucket_size>;
 
 
-   printf("Starting test for table %s\n", ht_type::get_name());
+   printf("Starting test for table %s\n", ht_type::get_name().c_str());
 
    uint32_t num_keys = n_buckets*bucket_size;
 
@@ -721,9 +725,9 @@ __host__ void test_table(uint64_t n_buckets){
 
 
    if (failed){
-      printf("Table %s FAILED:\n- Query after delete: %lu\n- Delete after delete: %lu\n- Failed first query: %lu\n- Failed original delete: %lu\n", ht_type::get_name(), misses[1], misses[2], misses[3], misses[4]);
+      printf("Table %s FAILED:\n- Query after delete: %lu\n- Delete after delete: %lu\n- Failed first query: %lu\n- Failed original delete: %lu\n", ht_type::get_name().c_str(), misses[1], misses[2], misses[3], misses[4]);
    } else {
-      printf("Table %s PASSED\n", ht_type::get_name());
+      printf("Table %s PASSED\n", ht_type::get_name().c_str());
    }
 
 
@@ -741,42 +745,121 @@ __host__ void test_table(uint64_t n_buckets){
 }
 
 
+__host__ void execute_test(std::string table, uint64_t table_capacity){
+
+
+   if (table == "p2"){
+
+      test_table<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity);
+
+      //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
+
+
+   } else if (table == "p2MD"){
+
+      test_table<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity);
+
+   } else if (table == "double"){
+      test_table<hashing_project::tables::double_generic, 8, 8>(table_capacity);
+
+   } else if (table == "doubleMD"){
+
+      test_table<hashing_project::tables::md_double_generic, 4, 32>(table_capacity);
+
+
+   } else if (table == "iceberg"){
+
+      test_table<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity);
+     
+   } else if (table == "icebergMD"){
+
+      test_table<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity);
+
+   } else if (table == "cuckoo") {
+       test_table<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity);
+   
+   } else if (table == "chaining"){
+
+      init_global_allocator(20ULL*1024*1024*1024, 111);
+
+      test_table<hashing_project::tables::chaining_generic, 4, 8>(table_capacity);
+
+      free_global_allocator();
+   } else if (table == "slabhash") {
+
+      test_slabhash(table_capacity);
+
+   } else {
+      throw std::runtime_error("Unknown table");
+   }
+
+
+}
 
 
 int main(int argc, char** argv) {
 
-   uint64_t n_buckets;
+   // uint64_t n_buckets;
 
 
 
-   if (argc < 2){
-      n_buckets = 1000000;
-   } else {
-      n_buckets = std::stoull(argv[1]);
+   // if (argc < 2){
+   //    n_buckets = 1000000;
+   // } else {
+   //    n_buckets = std::stoull(argv[1]);
+   // }
+
+
+   argparse::ArgumentParser program("adverarial_test");
+
+   // program.add_argument("square")
+   // .help("display the square of a given integer")
+   // .scan<'i', int>();
+
+   program.add_argument("--table", "-t")
+   .required()
+   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining slabhash");
+
+   program.add_argument("--capacity", "-c").required().scan<'u', uint64_t>().help("Number of slots in the table. Default is 100,000,000");
+
+   try {
+    program.parse_args(argc, argv);
    }
+   catch (const std::exception& err) {
+    std::cerr << err.what() << std::endl;
+    std::cerr << program;
+    return 1;
+   }
+
+   auto table = program.get<std::string>("--table");
+   auto table_capacity = program.get<uint64_t>("--capacity");
 
 
    //start of tests.
-   test_slabhash(n_buckets);
+   execute_test(table, table_capacity);
 
-   test_table<hashing_project::tables::md_p2_generic, 4, 32>(n_buckets);
+   // test_table<hashing_project::tables::md_p2_generic, 4, 32>(n_buckets);
 
-   test_table<hashing_project::tables::p2_ext_generic, 8, 32>(n_buckets);
+   // test_table<hashing_project::tables::p2_ext_generic, 8, 32>(n_buckets);
 
-   test_table<hashing_project::tables::p2_int_generic, 8, 32>(n_buckets);
+   // test_table<hashing_project::tables::double_generic, 4, 8>(n_buckets);
 
-   test_table<hashing_project::tables::double_generic, 4, 8>(n_buckets);
-
-   test_table<hashing_project::tables::iht_p2_generic, 8, 32>(n_buckets);
+   // test_table<hashing_project::tables::iht_p2_generic, 8, 32>(n_buckets);
 
 
-   init_global_allocator(16ULL*1024*1024*1024, 111);
+   // init_global_allocator(16ULL*1024*1024*1024, 111);
 
-   test_table<hashing_project::tables::chaining_generic, 4, 8>(n_buckets);
+   // test_table<hashing_project::tables::chaining_generic, 4, 8>(n_buckets);
 
-   free_global_allocator();
+   // free_global_allocator();
 
+   // test_table<hashing_project::tables::cuckoo_generic, 4, 8>(n_buckets);
 
+   // //test_table<hashing_project::wrappers::warpcore_wrapper, 8, 8>(n_buckets);
+
+   // test_table<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(n_buckets);
+   
+   // test_table<hashing_project::tables::md_double_generic, 4, 32>(n_buckets);
 
 
    cudaDeviceReset();

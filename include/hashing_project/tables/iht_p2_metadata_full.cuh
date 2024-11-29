@@ -1086,7 +1086,6 @@ namespace tables {
          tombstone_match = 0U;
          key_match = 0U;
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1172,14 +1171,12 @@ namespace tables {
          //uint4 tags = iht_full_load_multi_tags(metadata);
 
 
-         uint64_t * md_as_uint64_t = (uint64_t *) metadata; 
+         //uint64_t * md_as_uint64_t = (uint64_t *) metadata; 
 
          //wipe previous
          empty_match = 0U;
          tombstone_match = 0U;
          key_match = 0U;
-
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1266,8 +1263,6 @@ namespace tables {
          empty_match = 0U;
          tombstone_match = 0U;
          key_match = 0U;
-
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1362,7 +1357,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1456,8 +1450,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
-
          uint16_t key_tag = get_tag(upsert_key);
 
          for (uint i = my_tile.thread_rank(); i < (n_traversals-1)/8+1; i+=my_tile.size()){
@@ -1469,13 +1461,13 @@ namespace tables {
 
             
             //maybe change these
-            #if LARGE_BUCKET_MODS
-            //uint64_t local_empty = 0U;
-            uint64_t local_match = 0U;
-            #else
-            //uint32_t local_empty = 0U;
-            uint32_t local_match = 0U;
-            #endif
+            // #if LARGE_BUCKET_MODS
+            // //uint64_t local_empty = 0U;
+            // uint64_t local_match = 0U;
+            // #else
+            // //uint32_t local_empty = 0U;
+            // uint32_t local_match = 0U;
+            // #endif
 
 
 
@@ -1647,7 +1639,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -1751,7 +1742,6 @@ namespace tables {
 
          //wipe previous
 
-         int my_count = 0;
 
          uint16_t key_tag = get_tag(upsert_key);
 
@@ -3344,7 +3334,7 @@ namespace tables {
 
       }
 
-      static char * get_name(){
+      static std::string get_name(){
          return "iht_p2_metadata_full_hashing";
       }
 

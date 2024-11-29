@@ -77,7 +77,7 @@ using namespace gallatin::allocators;
 
 
 
-#define PRINT_THROUGHPUT_ONLY 0
+#define PRINT_THROUGHPUT_ONLY 1
 
 
 

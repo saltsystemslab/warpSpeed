@@ -113,6 +113,8 @@ namespace tables {
 
       //uint64_t lock_and_size;
 
+      static const Key holdingKey = tombstoneKey-1;
+
       using pair_type = ht_pair<Key, Val>;
 
       pair_type slots[bucket_size];
@@ -140,7 +142,7 @@ namespace tables {
             //load 8 tags and pack them
 
 
-            return ht_load_packed_pair<pair_type, Key, Val>(&slots[index]);
+            return ht_load_packed_pair<ht_pair, Key, Val>(&slots[index]);
 
             // pair_type loaded_pair;
 
@@ -162,6 +164,8 @@ namespace tables {
             bool found_flag = false;
 
             if (my_tile.thread_rank() == found % my_tile.size()){
+
+               ADD_PROBE
 
                Key loaded_key = hash_table_load(&slots[found].key);
 
@@ -242,11 +246,14 @@ namespace tables {
 
                   ballot_exists = true;
 
-                  ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, defaultKey, holdingKey);
                   ADD_PROBE
                   if (ballot){
 
-                     ht_store(&slots[i].val, ext_val);
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
+
+                     //ht_store(&slots[i].val, ext_val);
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                } 
@@ -265,7 +272,7 @@ namespace tables {
 
                   ballot_exists = true;
 
-                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, holdingKey);
                   ADD_PROBE
 
                   if (ballot){
@@ -283,7 +290,10 @@ namespace tables {
 
                      // __threadfence();
 
-                     ht_store(&slots[i].val, ext_val);
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
+
+                     //ht_store(&slots[i].val, ext_val);
 
 
                   }
@@ -351,11 +361,13 @@ namespace tables {
 
                   //ballot = typed_atomic_write(&slots[i].key, ext_key, ext_key);
                   //ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
-                  ballot = (hash_table_load(&slots[i].key) == ext_key);
+                  //ballot = (hash_table_load(&slots[i].key) == ext_key);
+                  ballot = true;
                   ADD_PROBE
                   if (ballot){
 
                      ht_store(&slots[i].val, ext_val);
+                     __threadfence();
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                }
@@ -423,6 +435,7 @@ namespace tables {
                   if (ballot){
 
                      replace_func(&slots[i], ext_key, ext_val);
+                     __threadfence();
 
                   }
 
@@ -1456,13 +1469,16 @@ namespace tables {
 
                      ADD_PROBE
 
-                     Key loaded_key = hash_table_load(&primary_bucket->slots[i*4+j].key);
+                     //Key loaded_key = hash_table_load(&primary_bucket->slots[i*4+j].key);
 
-                     if (loaded_key == upsert_key){
+                     auto loaded_pair = ht_load_packed_pair(&primary_bucket->slots[i*4+j]);
+
+                     if (loaded_pair.key == upsert_key){
 
                         found = true;
 
-                        val = hash_table_load(&primary_bucket->slots[i*4+j].val);
+                        //val = hash_table_load(&primary_bucket->slots[i*4+j].val);
+                        val = loaded_pair.val;
 
                      }
 
@@ -1549,13 +1565,17 @@ namespace tables {
 
                      ADD_PROBE
 
-                     Key loaded_key = hash_table_load(&primary_bucket->slots[i*8+j].key);
+                     //Key loaded_key = hash_table_load(&primary_bucket->slots[i*8+j].key);
 
-                     if (loaded_key == upsert_key){
+                     auto loaded_pair = ht_load_packed_pair(&primary_bucket->slots[i*8+j]);
+
+                     if (loaded_pair.key == upsert_key){
 
                         found = true;
 
-                        val = hash_table_load(&primary_bucket->slots[i*8+j].val);
+                        val = loaded_pair.val;
+
+                        //val = hash_table_load(&primary_bucket->slots[i*8+j].val);
 
                      }
 
@@ -1940,6 +1960,65 @@ namespace tables {
       }
 
 
+      __device__ bool query_internal(tile_type my_tile, Key key, Val & val, uint64_t bucket_primary, uint64_t step){
+
+
+         //uint64_t bucket_primary = hash(&key, sizeof(Key), seed) % n_buckets_primary;
+         //uint64_t step = hash(&key, sizeof(Key), seed+1);
+
+
+         for (int i = 0; i < META_MAX_PROBES; i++){
+
+
+            uint64_t bucket_index = (bucket_primary + step*i) % n_buckets;
+
+            md_bucket_type * md_bucket = get_metadata(bucket_index);
+            bucket_type * bucket_ptr = get_bucket_ptr(bucket_index);
+      
+
+
+            #if LARGE_BUCKET_MODS
+            uint64_t bucket_empty;
+            uint64_t bucket_tombstone;
+            uint64_t bucket_match;
+            #else
+
+            uint32_t bucket_empty;
+            uint32_t bucket_tombstone;
+            uint32_t bucket_match;
+
+            #endif
+
+
+            //global load occurs here - if counting loads this is the spot for bucket 0.
+            // #if COUNT_INSERT_PROBES
+            // ADD_PROBE_BUCKET
+            // #endif
+
+            #if LARGE_MD_LOAD
+            md_bucket->load_fill_ballots_huge(my_tile, key, bucket_empty, bucket_tombstone, bucket_match);
+
+            #else 
+
+            md_bucket->load_fill_ballots(my_tile, key, bucket_empty, bucket_tombstone, bucket_match);
+
+            #endif
+
+            if (bucket_ptr->query_match(my_tile, key, val, bucket_match)){
+               return true;
+            }
+
+
+            //shortcutting
+            if (__popc(bucket_empty) > 0) return false;
+
+
+         }
+
+         return false;
+
+
+      }
 
       __device__ packed_pair_type * query_packed_reference(tile_type my_tile, Key key, uint64_t bucket_primary, uint64_t step){
 
@@ -1973,7 +2052,7 @@ namespace tables {
 
             //global load occurs here - if counting loads this is the spot for bucket 0.
             // #if COUNT_INSERT_PROBES
-            // ADD_PROBE_BUCKET
+            ADD_PROBE_BUCKET
             // #endif
 
             #if LARGE_MD_LOAD
@@ -2265,8 +2344,10 @@ namespace tables {
 
             if (result != -1){
 
-               ht_store(&bucket_ptr->slots[result].key, key);
-               ht_store(&bucket_ptr->slots[result].val, val);
+               ht_store_packed_pair(&bucket_ptr->slots[result], {key, val});
+
+               // ht_store(&bucket_ptr->slots[result].key, key);
+               // ht_store(&bucket_ptr->slots[result].val, val);
 
                return true;
             }
@@ -2275,8 +2356,7 @@ namespace tables {
 
             if (result != -1){
 
-               ht_store(&bucket_ptr->slots[result].key, key);
-               ht_store(&bucket_ptr->slots[result].val, val);
+               ht_store_packed_pair(&bucket_ptr->slots[result], {key, val});
 
                return true;
             }
@@ -2298,24 +2378,7 @@ namespace tables {
          uint64_t bucket_primary = get_first_bucket(key_hash);
          uint64_t step = get_stride(key_hash);
 
-
-         stall_lock(my_tile, bucket_primary);
-
-         packed_pair_type * val_location = query_packed_reference(my_tile, key, bucket_primary, step);
-
-         if (val_location == nullptr){
-            unlock(my_tile, bucket_primary);
-            return false;
-
-         }
-
-         ADD_PROBE_TILE
-         
-         val = hash_table_load(&val_location->val);
-         __threadfence();
-
-         unlock(my_tile, bucket_primary);
-         return true;
+         return query_internal(my_tile, key, val, bucket_primary, step);
 
    }
 
@@ -2330,11 +2393,11 @@ namespace tables {
          uint64_t step = get_stride(key_hash);
 
 
-         stall_lock(my_tile, bucket_primary);
+         //stall_lock(my_tile, bucket_primary);
 
          packed_pair_type * val_location = query_packed_reference(my_tile, key, bucket_primary, step);
 
-         unlock(my_tile, bucket_primary);
+         //unlock(my_tile, bucket_primary);
 
          return val_location;
 

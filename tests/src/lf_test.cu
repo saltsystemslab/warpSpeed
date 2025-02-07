@@ -45,6 +45,7 @@ namespace fs = std::filesystem;
 // #include <hashing_project/table_wrappers/iht_wrapper.cuh>
 #include <hashing_project/table_wrappers/warpcore_wrapper.cuh>
 #include <hashing_project/tables/p2_hashing_external.cuh>
+#include <hashing_project/tables/p2_hashing_inverted.cuh>
 #include <hashing_project/tables/p2_hashing_internal.cuh>
 #include <hashing_project/tables/double_hashing.cuh>
 #include <hashing_project/tables/iht_p2.cuh>
@@ -971,6 +972,10 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
       //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
 
+   } else if (table == "p2inv"){
+
+      lf_test<hashing_project::tables::p2_inv_generic, 8, 32>(table_capacity, access_pattern);
+
    } else if (table == "p2MD"){
 
       lf_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, access_pattern);
@@ -1023,7 +1028,7 @@ int main(int argc, char** argv) {
 
    program.add_argument("--table", "-t")
    .required()
-   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
+   .help("Specify table type. Options [p2 p2MD p2inv double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
    program.add_argument("--capacity", "-c").required().scan<'u', uint64_t>().help("Number of slots in the table. Default is 100,000,000");
 

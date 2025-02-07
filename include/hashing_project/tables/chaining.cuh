@@ -129,7 +129,7 @@ namespace tables {
 
       //static_assert(size >= partition_size, "size must be at least as large as team size");
       //static_assert((size % partition_size) == 0, "team size must be clean divisor of size"); 
-
+      static const Key holdingKey = tombstoneKey-1;
 
 
 
@@ -230,8 +230,12 @@ namespace tables {
                   //this thread is leader for this iteration
                   //no need to recheck, I observed previously.
                   ADD_PROBE
-                  if (typed_atomic_write(&slots[i].key, defaultKey, insertKey)){
-                     ht_store(&slots[i].val,insertVal);
+                  if (typed_atomic_write(&slots[i].key, defaultKey, holdingKey)){
+
+                     ht_store_packed_pair(&slots[i], {insertKey, insertVal});
+                     
+                     __threadfence();
+                     //ht_store(&slots[i].val,insertVal);
 
                      success = true;
       
@@ -262,8 +266,11 @@ namespace tables {
                   //this thread is leader for this iteration
                   //no need to recheck, I observed previously.
                   ADD_PROBE
-                  if (typed_atomic_write(&slots[i].key, tombstoneKey, insertKey)){
-                     ht_store(&slots[i].val,insertVal);
+                  if (typed_atomic_write(&slots[i].key, tombstoneKey, holdingKey)){
+                     //ht_store(&slots[i].val,insertVal);
+
+                     ht_store_packed_pair(&slots[i], {insertKey, insertVal});
+                     __threadfence();
 
                      success = true;
       
@@ -341,11 +348,13 @@ namespace tables {
 
                   ballot_exists = true;
                   ADD_PROBE
-                  ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, defaultKey, holdingKey);
                   if (ballot){
 
-                     ht_store(&slots[i].val, ext_val);
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     //ht_store(&slots[i].val, ext_val);
                      //typed_atomic_exchange(&slots[i].val, ext_val);
+                     __threadfence();
                   }
                } 
 
@@ -363,7 +372,7 @@ namespace tables {
 
                   ballot_exists = true;
                   ADD_PROBE
-                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, holdingKey);
 
                   if (ballot){
 
@@ -379,8 +388,10 @@ namespace tables {
                      // }
 
                      // __threadfence();
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
 
-                     ht_store(&slots[i].val, ext_val);
+                     //ht_store(&slots[i].val, ext_val);
 
 
                   }
@@ -439,10 +450,12 @@ namespace tables {
                if (leader == my_tile.thread_rank()){
 
                   ADD_PROBE
-                  ballot = typed_atomic_write(&slots[i].key, ext_key, ext_key);
+                  //ballot = typed_atomic_write(&slots[i].key, ext_key, ext_key);
+                  ballot = true;
                   if (ballot){
 
                      ht_store(&slots[i].val, ext_val);
+                     __threadfence();
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                }
@@ -1323,7 +1336,7 @@ namespace tables {
 
          uint64_t bucket_0 = gallatin::hashers::MurmurHash64A(&key, sizeof(Key), seed) % nblocks;
 
-         stall_lock(my_tile, bucket_0);
+         //stall_lock(my_tile, bucket_0);
 
 
          //query
@@ -1333,7 +1346,7 @@ namespace tables {
          packed_pair_type * stored_copy = query_packed_reference(my_tile, key, bucket_0);
 
 
-         unlock(my_tile, bucket_0);
+         //unlock(my_tile, bucket_0);
          
          return stored_copy;
 
@@ -1417,25 +1430,34 @@ namespace tables {
 
          uint64_t my_slot = gallatin::hashers::MurmurHash64A(&queryKey, sizeof(Key), seed) % nblocks;
 
-         stall_lock(my_tile, my_slot);
+
+         // #if STABLE_HT_LOCKLESS_QUERY == 0
+         // stall_lock(my_tile, my_slot);
+         // #endif
 
 
-         packed_pair_type * queried_value = query_packed_reference(my_tile, queryKey, my_slot);
+         packed_pair_type queried_value = query_packed(my_tile, queryKey, my_slot);
 
-         if (queried_value == nullptr){
+         if (queried_value.key == defaultKey){
 
-            unlock(my_tile, my_slot);
+            // #if STABLE_HT_LOCKLESS_QUERY == 0
+            // unlock(my_tile, my_slot);
+            // #endif
             return false;
 
          }
 
-         if (my_tile.thread_rank() == 0){
-            returnVal = hash_table_load(&queried_value->val);
-         }
+         // if (my_tile.thread_rank() == 0){
+            
+         // }
 
-         returnVal = my_tile.shfl(returnVal, 0);
+         returnVal = queried_value.val;
 
-         unlock(my_tile, my_slot);
+         //returnVal = my_tile.shfl(returnVal, 0);
+
+         // #if STABLE_HT_LOCKLESS_QUERY == 0
+         // unlock(my_tile, my_slot);
+         // #endif
 
          return true;
 

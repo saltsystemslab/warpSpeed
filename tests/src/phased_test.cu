@@ -55,7 +55,7 @@ namespace fs = std::filesystem;
 #include <hashing_project/tables/cuckoo.cuh>
 #include <hashing_project/tables/double_hashing_metadata.cuh>
 
-
+#include <slabhash/gpu_hash_table.cuh>
 
 #include <iostream>
 #include <locale>
@@ -80,7 +80,7 @@ using namespace gallatin::allocators;
 #define PRINT_THROUGHPUT_ONLY 1
 
 
-#define DATA_TYPE uint64_t
+#define DATA_TYPE uint32_t
 
 
 #define LARGE_MD_LOAD 1
@@ -287,6 +287,7 @@ __global__ void query_kernel(ht_type * table, DATA_TYPE * insert_buffer, uint64_
 }
 
 
+
 template <template<typename, typename, uint, uint> typename hash_table_type, uint tile_size, uint bucket_size>
 __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
 
@@ -464,6 +465,358 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
    cudaDeviceSynchronize();
 
 }
+
+
+//start of slabhash modifications
+
+template <typename ht_type>
+__global__ void insert_kernel_slabhash(ht_type table, DATA_TYPE * insert_buffer, uint64_t n_keys, uint64_t * misses){
+
+
+   auto thread_block = cg::this_thread_block();
+
+   cg::thread_block_tile<32> my_tile = cg::tiled_partition<32>(thread_block);
+
+
+   uint64_t tid = gallatin::utils::get_tile_tid(my_tile);
+
+   if (tid >= n_keys) return;
+
+   // if (__popc(my_tile.ballot(1)) != 32){
+   //    printf("Bad tile size\n");
+   // }
+
+
+   DATA_TYPE my_key = insert_buffer[tid];
+   DATA_TYPE my_val = insert_buffer[tid];
+
+   bool to_be_inserted = (my_tile.thread_rank() == 0);
+
+   uint32_t stid = threadIdx.x+blockIdx.x*blockDim.x;
+   uint32_t slaneId = threadIdx.x & 0x1F;
+
+   AllocatorContextT local_allocator_ctx(table.getAllocatorContext());
+   local_allocator_ctx.initAllocator(stid, slaneId);
+
+   uint32_t myBucket = table.computeBucket(my_key);
+
+
+   table.insertPairUnique(to_be_inserted, slaneId, my_key, my_val, myBucket, local_allocator_ctx);
+      //table->upsert_replace(my_tile, my_key, my_key);
+
+}
+
+
+template <typename ht_type>
+__global__ void remove_kernel_slabhash(ht_type table, DATA_TYPE * insert_buffer, uint64_t n_keys, uint64_t * misses){
+
+
+   auto thread_block = cg::this_thread_block();
+
+   cg::thread_block_tile<32> my_tile = cg::tiled_partition<32>(thread_block);
+
+   uint64_t tid = gallatin::utils::get_tile_tid(my_tile);
+
+   if (tid >= n_keys) return;
+
+   // if (__popc(my_tile.ballot(1)) != 32){
+   //    printf("Bad tile size\n");
+   // }
+
+
+   DATA_TYPE my_key = insert_buffer[tid];
+   DATA_TYPE my_val = insert_buffer[tid];
+
+   bool to_be_inserted = (my_tile.thread_rank() == 0);
+
+   uint32_t stid = threadIdx.x+blockIdx.x*blockDim.x;
+   uint32_t slaneId = threadIdx.x & 0x1F;
+
+   AllocatorContextT local_allocator_ctx(table.getAllocatorContext());
+   local_allocator_ctx.initAllocator(stid, slaneId);
+
+   uint32_t myBucket = table.computeBucket(my_key);
+
+   if (!table.deleteKey(to_be_inserted, slaneId, my_key, myBucket)){
+
+      // table->upsert_replace(my_tile, my_key, my_key);
+
+      // table->remove(my_tile, my_key);
+
+
+      // #if MEASURE_FAILS
+      // if (my_tile.thread_rank() == 0){
+
+      //    atomicAdd((unsigned long long int *)&misses[2], 1ULL);
+      //    //printf("Init upsert failed for %lu\n", my_key);
+      // }
+      // #endif
+      
+   } 
+
+}
+
+
+
+template <typename ht_type>
+__global__ void query_kernel_slabhash(ht_type table, DATA_TYPE * insert_buffer, uint64_t n_keys, uint64_t * misses){
+
+   auto thread_block = cg::this_thread_block();
+
+   cg::thread_block_tile<32> my_tile = cg::tiled_partition<32>(thread_block);
+
+   uint64_t tid = gallatin::utils::get_tile_tid(my_tile);
+
+   if (tid >= n_keys) return;
+
+   // if (__popc(my_tile.ballot(1)) != 32){
+   //    printf("Bad tile size\n");
+   // }
+
+
+   DATA_TYPE my_key = insert_buffer[tid];
+   DATA_TYPE my_val = insert_buffer[tid];
+
+   bool to_be_inserted = (my_tile.thread_rank() == 0);
+
+   uint32_t stid = threadIdx.x+blockIdx.x*blockDim.x;
+   uint32_t slaneId = threadIdx.x & 0x1F;
+
+   AllocatorContextT local_allocator_ctx(table.getAllocatorContext());
+   local_allocator_ctx.initAllocator(stid, slaneId);
+
+   uint32_t myBucket = table.computeBucket(my_key);
+
+   table.searchKey(to_be_inserted, slaneId, my_key, my_val, myBucket);
+
+
+   if (my_val == SEARCH_NOT_FOUND){
+
+      //table->upsert_replace(my_tile, my_key, my_key);
+
+      //table->find_with_reference(my_tile, my_key, my_val);
+
+      table.searchKey(to_be_inserted, slaneId, my_key, my_val, myBucket);
+
+      #if MEASURE_FAILS
+      if (my_tile.thread_rank() == 0){
+
+         atomicAdd((unsigned long long int *)&misses[1], 1ULL);
+         //printf("Init upsert failed for %lu\n", my_key);
+      }
+      #endif
+      
+   } else {
+
+      if (my_val != my_key){
+
+
+        //table->find_with_reference(my_tile, my_key, my_val);
+
+
+         atomicAdd((unsigned long long int *)&misses[1], 1ULL);
+      }
+   }
+
+}
+
+__host__ void lf_test_slabhash(uint64_t n_indices, DATA_TYPE * access_pattern){
+
+
+
+
+
+   const uint64_t tile_size = 32;
+
+
+   // using ht_type = hash_table_type<DATA_TYPE, DATA_TYPE, tile_size, bucket_size>;
+
+
+   //generate table and buffers
+   uint64_t * misses;
+
+   cudaMallocManaged((void **)&misses, sizeof(uint64_t)*4);
+
+   cudaDeviceSynchronize();
+
+   misses[0] = 0;
+   misses[1] = 0;
+   misses[2] = 0;
+   misses[3] = 0;
+
+
+   #if COUNT_PROBES
+
+   #if LOAD_CHEAP
+      std::string filename = "results/lf_probe_bght/";
+   #else
+      std::string filename = "results/lf_probe/";
+   #endif
+
+   filename = filename + ht_type::get_name() + ".txt";
+
+
+   //printf("Writing to %s\n", filename.c_str());
+   //write to output
+
+   std::ofstream myfile;
+   myfile.open (filename.c_str());
+   myfile << "lf,insert,query,remove\n";
+
+
+   #else
+
+   #if LOAD_CHEAP
+      std::string filename = "results/lf_bght/";
+   #else
+      std::string filename = "results/lf/";
+   #endif
+
+   filename = filename + "slabhash.txt";
+
+
+   //printf("Writing to %s\n", filename.c_str());
+   //write to output
+
+   std::ofstream myfile;
+   myfile.open (filename.c_str());
+   myfile << "lf,insert,query,remove\n";
+
+   #endif
+
+  
+
+
+   double avg_insert_throughput = 0;
+   double avg_query_throughput = 0;
+   double avg_delete_throughput = 0;
+
+   uint64_t n_buckets = n_indices/32;
+   uint64_t seed = 29397921461404819ULL;
+
+   for (int i = 1; i < 19; i++){
+
+      
+
+      double lf = .05*i;
+
+      using slabhash_type = gpu_hash_table<DATA_TYPE, DATA_TYPE, SlabHashTypeT::ConcurrentMap>;
+
+
+      slabhash_type slabhash_table(n_indices, n_buckets, 0, seed);
+
+
+      using gpu_slabhash_type = GpuSlabHash<DATA_TYPE, DATA_TYPE, SlabHashTypeT::ConcurrentMap>;
+      gpu_slabhash_type * dev_table = slabhash_table.slab_hash_;
+
+      using contextType = GpuSlabHashContext<DATA_TYPE, DATA_TYPE, SlabHashTypeT::ConcurrentMap>;
+
+      contextType slabhash_context = dev_table->gpu_context_;
+
+      //ht_type * table = ht_type::generate_on_device(n_indices, 42);
+
+      helpers::get_num_probes();
+
+      uint64_t items_to_insert = lf*n_indices;
+
+      DATA_TYPE * device_data = gallatin::utils::get_device_version<DATA_TYPE>(items_to_insert);
+
+      //set original buffer
+      cudaMemcpy(device_data, access_pattern, sizeof(DATA_TYPE)*items_to_insert, cudaMemcpyHostToDevice);
+
+      cudaDeviceSynchronize();
+
+      gallatin::utils::timer insert_timer;
+
+      insert_kernel_slabhash<contextType><<<(items_to_insert*tile_size-1)/256+1,256>>>(slabhash_context, device_data, items_to_insert, misses);
+
+      insert_timer.sync_end();
+
+      uint64_t insert_probes = helpers::get_num_probes();
+
+      cudaDeviceSynchronize();
+
+
+
+      gallatin::utils::timer query_timer;
+
+      query_kernel_slabhash<contextType><<<(items_to_insert*tile_size-1)/256+1,256>>>(slabhash_context, device_data, items_to_insert, misses);
+
+      query_timer.sync_end();
+
+      uint64_t query_probes = helpers::get_num_probes();
+
+      cudaDeviceSynchronize();
+
+
+
+      gallatin::utils::timer remove_timer;
+      
+      remove_kernel_slabhash<contextType><<<(items_to_insert*tile_size-1)/256+1,256>>>(slabhash_context, device_data, items_to_insert, misses);
+
+      remove_timer.sync_end();
+
+      uint64_t remove_probes = helpers::get_num_probes();
+
+      cudaDeviceSynchronize();
+
+
+
+      //free tables and generate results
+      cudaFree(device_data);
+
+      //table->print_chain_stats();
+
+      //ht_type::free_on_device(table);
+
+      // insert_timer.print_throughput("Inserted", items_to_insert);
+      // query_timer.print_throughput("Queried", items_to_insert);
+      // remove_timer.print_throughput("Removed", items_to_insert);
+
+      #if COUNT_PROBES
+
+      //printf("Probes %llu %llu %llu\n", insert_probes, query_probes, remove_probes);
+    
+      myfile << lf << "," << std::setprecision(12) << 1.0*insert_probes/items_to_insert << "," << 1.0*query_probes/items_to_insert << "," << 1.0*remove_probes/items_to_insert << "\n";
+
+      #else
+
+      myfile << lf << "," << std::setprecision(12) << 1.0*items_to_insert/(insert_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(query_timer.elapsed()*1000000) << "," << 1.0*items_to_insert/(remove_timer.elapsed()*1000000) << "\n";
+
+      #endif
+
+      printf("Misses: %lu %lu %lu\n", misses[0], misses[1], misses[2]);
+
+      // misses[0] = 0;
+      // misses[1] = 0;
+      // misses[2] = 0;
+      cudaDeviceSynchronize();
+
+      //cuckoo is not leaking memory oon device.
+      //gallatin::allocators::print_global_stats();
+
+      avg_insert_throughput = 1.0*items_to_insert/(insert_timer.elapsed()*1000000);
+      avg_query_throughput = 1.0*items_to_insert/(query_timer.elapsed()*1000000);
+      avg_delete_throughput = 1.0*items_to_insert/(remove_timer.elapsed()*1000000);
+
+
+
+   }
+
+   double avg_throughput = (avg_insert_throughput+avg_query_throughput+avg_delete_throughput)/3;
+
+   //printf("%u-%u Avg operations throughput %f\n", bucket_size, tile_size, avg_throughput);
+
+   //printf("Misses: %lu %lu %lu\n", misses[0], misses[1], misses[2]);
+
+   myfile.close();
+ 
+  
+   cudaFree(misses);
+   cudaDeviceSynchronize();
+
+}
+
 
 template <template<typename, typename, uint, uint> typename hash_table_type, uint tile_size, uint bucket_size>
 __host__ void lf_test_combo_cuckoo(uint64_t n_indices, DATA_TYPE * access_pattern){
@@ -992,8 +1345,13 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
       lf_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, access_pattern);
 
    } else if (table == "cuckoo") {
-       lf_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, access_pattern);
+
+      lf_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, access_pattern);
    
+   } else if (table == "slabhash") {
+
+      lf_test_slabhash(table_capacity, access_pattern);
+
    } else if (table == "chaining"){
 
       init_global_allocator(30ULL*1024*1024*1024, 111);

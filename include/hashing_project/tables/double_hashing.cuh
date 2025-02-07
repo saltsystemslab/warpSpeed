@@ -88,6 +88,8 @@ namespace tables {
 
       //uint64_t lock_and_size;
 
+      static const Key holdingKey = tombstoneKey-1;
+
       using pair_type = ht_pair<Key, Val>;
 
       pair_type slots[bucket_size];
@@ -120,6 +122,10 @@ namespace tables {
       //    return loaded_pair;
 
       // }
+
+      __device__ pair_type load_packed_pair(int index){
+         return ht_load_packed_pair<ht_pair, Key, Val>(&slots[index]);
+      }
 
 
       // __device__ int insert(Key ext_key, Val ext_val, cg::thread_block_tile<partition_size> my_tile){
@@ -280,10 +286,12 @@ namespace tables {
                   ballot_exists = true;
 
                   ADD_PROBE
-                  ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, defaultKey, holdingKey);
                   if (ballot){
 
-                     ht_store(&slots[i].val, ext_val);
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
+                     //ht_store(&slots[i].val, ext_val);
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                } 
@@ -303,7 +311,7 @@ namespace tables {
                   ballot_exists = true;
 
                   ADD_PROBE
-                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, holdingKey);
 
                   if (ballot){
 
@@ -320,7 +328,10 @@ namespace tables {
 
                      // __threadfence();
 
-                     ht_store(&slots[i].val, ext_val);
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
+
+                     //ht_store(&slots[i].val, ext_val);
 
 
                   }
@@ -379,9 +390,11 @@ namespace tables {
                if (leader == my_tile.thread_rank()){
 
                   ADD_PROBE
-                  ballot = typed_atomic_write(&slots[i].key, ext_key, ext_key);
+                  //ballot = typed_atomic_write(&slots[i].key, ext_key, ext_key);
+                  ballot = true;
                   if (ballot){
 
+                     //ht_store_packed_pair(&slots[i], {ext_key, ext_val});
                      ht_store(&slots[i].val, ext_val);
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
@@ -474,18 +487,18 @@ namespace tables {
 
             if (valid){
 
-               //pair_type loaded_pair = load_packed_pair(i);
+               pair_type loaded_pair = load_packed_pair(i);
 
-               Key loaded_key = hash_table_load(&slots[i].key);
+               //Key loaded_key = hash_table_load(&slots[i].key);
 
-               //found_ballot = (loaded_pair.key == ext_key);
+               found_ballot = (loaded_pair.key == ext_key);
 
-               found_ballot = (loaded_key == ext_key);
+               //found_ballot = (loaded_key == ext_key);
 
                if (found_ballot){
 
-                  //loaded_val = loaded_pair.val;
-                  loaded_val = hash_table_load(&slots[i].val);
+                  loaded_val = loaded_pair.val;
+                  //loaded_val = hash_table_load(&slots[i].val);
                }
             }
 
@@ -1201,23 +1214,25 @@ namespace tables {
          uint64_t bucket_primary = get_first_bucket(key_hash);
          uint64_t step = get_stride(key_hash);
 
+         
+         for (int i = 0; i < DOUBLE_BACK_PROBES; i++){
 
-         stall_lock(my_tile, bucket_primary);
 
-         Val * val_location = query_reference(my_tile, key, bucket_primary, step);
+            uint64_t bucket_index = (bucket_primary + step*i) % n_buckets_primary;
+            bucket_type * bucket_ptr = get_bucket_ptr_primary(bucket_index);
 
-         if (val_location == nullptr){
-            unlock(my_tile, bucket_primary);
-            return false;
+            // #if MEASURE_QUERIES
+            // ADD_PROBE_ADJUSTED
+            // #endif
 
+
+            if (bucket_ptr->query(my_tile, key, val)){
+               return true;
+            }
+  
          }
 
-         ADD_PROBE_TILE
-         val = hash_table_load(val_location);
-         __threadfence();
-
-         unlock(my_tile, bucket_primary);
-         return true;
+         return false;;
 
       }
 
@@ -1262,11 +1277,11 @@ namespace tables {
             uint64_t step = get_stride(key_hash);
 
 
-            stall_lock(my_tile, bucket_primary);
+            //stall_lock(my_tile, bucket_primary);
 
             packed_pair_type * val_location = query_packed_reference(my_tile, key, bucket_primary, step);
 
-            unlock(my_tile, bucket_primary);
+            //unlock(my_tile, bucket_primary);
 
             return val_location;
 

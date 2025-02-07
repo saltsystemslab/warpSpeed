@@ -5,7 +5,7 @@
 #include <gallatin/allocators/alloc_utils.cuh>
 #include <hashing_project/helpers/ht_pairs.cuh>
 
-
+#define STABLE_HT_LOCKLESS_QUERY 0
 
 #if LOAD_CHEAP
 
@@ -39,6 +39,13 @@ __device__ inline pair ht_load_metadata (const uint16_t * address) {
 
 }
 
+
+template <template<typename, typename> typename pair, typename Key, typename Val>
+__device__ inline void ht_store_packed_pair(pair<Key, Val> * address, pair<Key, Val> data) {
+
+  address[0] = data;
+
+}
 
 #else
 
@@ -140,6 +147,33 @@ __device__ inline pair<Key, Val> ht_load_packed_pair (pair<Key, Val> * address) 
     using pair_type = pair<Key,Val>;
 
     return ((pair_type *) &return_val)[0];
+
+  }
+
+}
+
+//large vector store
+//large vector load.
+template <template<typename, typename> typename pair, typename Key, typename Val>
+__device__ inline void ht_store_packed_pair(pair<Key, Val> * address, pair<Key, Val> data) {
+
+  if constexpr  (sizeof(Key) + sizeof(Val) == 16){
+
+
+    asm volatile("st.gpu.release.v2.u64 [%0], {%1,%2};" :: "l"(address), "l"(data.key), "l"(data.val) : "memory");
+
+    return;
+
+  }
+
+  else if constexpr (sizeof(Key) + sizeof(Val) == 8){
+
+
+    asm volatile("st.gpu.release.v2.u32 [%0], {%1,%2};" :: "l"(address), "r"(data.key), "r"(data.val) : "memory");
+
+    //asm volatile("st.gpu.release.u64 [%0], %1;" :: "l"((uint64_t *) address), "l"((uint64_t) data) : "memory");
+
+    return;
 
   }
 

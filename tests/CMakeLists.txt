@@ -36,6 +36,8 @@ ConfigureExecutableHT(aging_combined "${CMAKE_CURRENT_SOURCE_DIR}/src/aging_comb
 
 ConfigureExecutableHT(sparse_tensor_test "${CMAKE_CURRENT_SOURCE_DIR}/src/sparse_tensor_test.cu" "${HT_TESTS_BINARY_DIR}")
 
+ConfigureExecutableHT(ycsb_test "${CMAKE_CURRENT_SOURCE_DIR}/src/ycsb_test.cu" "${HT_TESTS_BINARY_DIR}")
+
 
 #updated tests - argparser handles individual test splitup.
 

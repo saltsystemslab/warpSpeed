@@ -90,6 +90,8 @@ namespace tables {
 
       //uint64_t lock_and_size;
 
+      static const Key holdingKey = tombstoneKey-1;
+
       using pair_type = ht_pair<Key, Val>;
 
       pair_type slots[bucket_size];
@@ -289,10 +291,12 @@ namespace tables {
                   ballot_exists = true;
 
                   ADD_PROBE
-                  ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, defaultKey, holdingKey);
                   if (ballot){
 
-                     ht_store(&slots[i].val, ext_val);
+                     //ht_store(&slots[i].val, ext_val);
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                } 
@@ -311,7 +315,7 @@ namespace tables {
 
                   ballot_exists = true;
                   ADD_PROBE
-                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, holdingKey);
 
                   if (ballot){
 
@@ -328,8 +332,9 @@ namespace tables {
 
                      // __threadfence();
 
-                     ht_store(&slots[i].val, ext_val);
-
+                     //ht_store(&slots[i].val, ext_val);
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
 
                   }
 
@@ -599,8 +604,11 @@ namespace tables {
 
                ADD_PROBE
 
-               if (gallatin::utils::typed_atomic_write(&slots[i].key, defaultKey, upsert_key)){
-                  ht_store(&slots[i].val, upsert_val);
+               if (gallatin::utils::typed_atomic_write(&slots[i].key, defaultKey, holdingKey)){
+
+                  ht_store_packed_pair(&slots[i], {upsert_key, upsert_val});
+                  __threadfence();
+                  //ht_store(&slots[i].val, upsert_val);
                   ballot = true;
                }
 
@@ -681,8 +689,11 @@ namespace tables {
 
                ADD_PROBE
 
-               if (gallatin::utils::typed_atomic_write(&slots[i].key, defaultKey, upsert_key)){
-                  ht_store(&slots[i].val, upsert_val);
+               if (gallatin::utils::typed_atomic_write(&slots[i].key, defaultKey, holdingKey)){
+
+                  ht_store_packed_pair(&slots[i], {upsert_key, upsert_val});
+                  __threadfence();
+                  //ht_store(&slots[i].val, upsert_val);
                   ballot = true;
                }
 
@@ -1671,16 +1682,11 @@ namespace tables {
 
          uint64_t key_hash = hash(&key, sizeof(Key), seed);
          uint64_t bucket_primary = get_first_bucket(key_hash);
-         
-
-         stall_lock(my_tile, bucket_primary);
-
 
          bucket_type * bucket_primary_ptr = get_bucket_ptr_primary(bucket_primary);
 
 
          if (bucket_primary_ptr->query(my_tile, key, val)){
-            unlock(my_tile, bucket_primary);
             return true;
          }
 
@@ -1692,7 +1698,6 @@ namespace tables {
 
 
          if (bucket_0_ptr->query(my_tile, key, val)){
-            unlock(my_tile, bucket_primary);
             return true;
          }
 
@@ -1703,11 +1708,8 @@ namespace tables {
 
 
          if (bucket_1_ptr->query(my_tile, key, val)){
-            unlock(my_tile, bucket_primary);
             return true;
          }
-
-         unlock(my_tile, bucket_primary);
 
          return false;
 
@@ -1877,9 +1879,6 @@ namespace tables {
 
          uint64_t key_hash = hash(&key, sizeof(Key), seed);
          uint64_t bucket_primary = get_first_bucket(key_hash);
-         
-
-         stall_lock(my_tile, bucket_primary);
 
 
          bucket_type * bucket_primary_ptr = get_bucket_ptr_primary(bucket_primary);
@@ -1891,7 +1890,6 @@ namespace tables {
 
 
          if (return_pair != nullptr || found_empty){
-            unlock(my_tile, bucket_primary);
             return return_pair;
          }
 
@@ -1905,8 +1903,8 @@ namespace tables {
          return_pair = bucket_0_ptr->query_pair(my_tile, key, found_empty);
 
 
-         if (return_pair != nullptr || found_empty){
-            unlock(my_tile, bucket_primary);
+         if (return_pair != nullptr){
+
             return return_pair;
          }
 
@@ -1918,8 +1916,6 @@ namespace tables {
 
          return_pair = bucket_1_ptr->query_pair(my_tile, key, found_empty);
 
-
-         unlock(my_tile, bucket_primary);
 
          return return_pair;
 

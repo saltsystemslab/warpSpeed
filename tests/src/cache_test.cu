@@ -50,6 +50,8 @@ namespace fs = std::filesystem;
 #include <hashing_project/tables/iht_p2_metadata_full.cuh>
 #include <hashing_project/tables/double_hashing_metadata.cuh>
 #include <hashing_project/tables/cuckoo.cuh>
+
+#include <hashing_project/helpers/zipf.cuh>
 #include <cooperative_groups.h>
 
 namespace cg = cooperative_groups;
@@ -63,9 +65,8 @@ using namespace gallatin::allocators;
    #define TEST_BLOCK_SIZE 256
 #endif
 
-
 template <typename T>
-__host__ T * generate_data(uint64_t nitems){
+__host__ T * generate_uniform(uint64_t nitems){
 
 
    //malloc space
@@ -96,6 +97,22 @@ __host__ T * generate_data(uint64_t nitems){
    //printf("Generation done\n");
    return vals;
 }
+
+template <typename T>
+__host__ T * generate_data(uint64_t nitems, uint64_t host_items, bool zipfian, double alpha){
+
+   if (zipfian){
+
+      return generate_zipfian_values(nitems, host_items, alpha);
+
+   } else {
+      return generate_uniform<T>(nitems);
+   }
+
+
+}
+
+
 
 
 template <typename cache_type, uint tile_size>
@@ -137,7 +154,7 @@ __global__ void cache_read_kernel(cache_type * cache, uint64_t n_indices, uint64
 //The correctness check is done by treating each allocation as a uint64_t and writing the tid
 // if TID is not what is expected, we know that a double malloc has occurred.
 template <template<typename, typename, uint, uint> typename hash_table_type, uint tile_size, uint bucket_size>
-__host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pattern){
+__host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pattern, bool zipfian){
 
 
    using cache_type = hashing_project::ht_fifo_cache<hash_table_type, tile_size, bucket_size>;
@@ -150,7 +167,14 @@ __host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pa
 
 
 
-   std::string filename = "results/cache/";
+
+   std::string filename = "results/cache";
+
+   if (zipfian) {
+      filename += "_zipfian/";
+   } else {
+      filename += "/";
+   }
 
    filename += cache_type::get_name();
 
@@ -176,6 +200,8 @@ __host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pa
 
    uint64_t tiny_capacity = host_items*(.01);
 
+   printf("Capacity: %lu\n", tiny_capacity);
+
    cache_type * tiny_cache = cache_type::generate_on_device(host_items, tiny_capacity, .85);
 
    cudaDeviceSynchronize();
@@ -190,6 +216,8 @@ __host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pa
 
    myfile << .01 << " " << std::setprecision(12) << 1.0*n_ops/(tiny_duration*1000000) << "\n";
 
+   tiny_cache->print_space_usage();
+   
    cache_type::free_on_device(tiny_cache);
 
 
@@ -200,6 +228,8 @@ __host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pa
    for (int i = 2; i <= 14; i++){
 
       uint64_t capacity = host_items*(.05*i);
+
+      printf("Capacity: %lu\n", capacity);
 
       cache_type * cache = cache_type::generate_on_device(host_items, capacity, .85);
 
@@ -228,44 +258,44 @@ __host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pa
 }
 
 
-__host__ void execute_test(std::string table, uint64_t n_ops, uint64_t host_items){
+__host__ void execute_test(std::string table, uint64_t n_ops, uint64_t host_items, bool zipfian, double alpha){
 
 
-   uint64_t * access_data = generate_data<uint64_t>(n_ops);
+   uint64_t * access_data = generate_data<uint64_t>(n_ops, host_items, zipfian, alpha);
    //auto access_pattern = generate_data<DATA_TYPE>(table_capacity);
 
    if (table == "p2"){
 
-      cache_test<hashing_project::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data);
+      cache_test<hashing_project::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data,zipfian);
 
       //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
 
    } else if (table == "p2MD"){
 
-      cache_test<hashing_project::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data);
+      cache_test<hashing_project::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
 
    } else if (table == "double"){
-      cache_test<hashing_project::tables::double_generic, 8, 8>(host_items, n_ops, access_data);
+      cache_test<hashing_project::tables::double_generic, 8, 8>(host_items, n_ops, access_data,zipfian);
 
    } else if (table == "doubleMD"){
 
-      cache_test<hashing_project::tables::md_double_generic, 4, 32>(host_items, n_ops, access_data);
+      cache_test<hashing_project::tables::md_double_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
 
 
    } else if (table == "iceberg"){
 
-      cache_test<hashing_project::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data);
+      cache_test<hashing_project::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data,zipfian);
      
    } else if (table == "icebergMD"){
 
-      cache_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data);
+      cache_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
 
    } else if (table == "chaining"){
 
       init_global_allocator(16ULL*1024*1024*1024, 111);
 
-      cache_test<hashing_project::tables::chaining_generic, 4, 8>(host_items, n_ops, access_data);
+      cache_test<hashing_project::tables::chaining_generic, 4, 8>(host_items, n_ops, access_data,zipfian);
 
       free_global_allocator();
    } else {
@@ -295,6 +325,9 @@ int main(int argc, char** argv) {
 
    program.add_argument("--host_items", "-h").required().scan<'u', uint64_t>().help("Number of items in the test.");
 
+   program.add_argument("--zipfian", "-z").flag().help("Use zipfian values. If not queries are uniform random.");
+
+   program.add_argument("--alpha", "-a").scan<'g', double>().help("Alpha value for the zipfian generator, should be between 0-1.").default_value(.9);
 
    try {
     program.parse_args(argc, argv);
@@ -309,6 +342,10 @@ int main(int argc, char** argv) {
    auto n_queries = program.get<uint64_t>("--n_queries");
 
    auto host_items = program.get<uint64_t>("--host_items");
+
+   bool zipfian = program.get<bool>("--zipfian");
+
+   double alpha = program.get<double>("--alpha");
 
    // uint64_t host_items;
 
@@ -334,13 +371,18 @@ int main(int argc, char** argv) {
     //std::cerr << "Failed to create a directory\n";
    }
 
+
+   if (zipfian){
+      fs::create_directory("results/cache_zipfian");
+   }
+
    if(fs::create_directory("results/cache")){
     //std::cout << "Created a directory\n";
    } else {
     //std::cerr << "Failed to create a directory\n";
    }
 
-   execute_test(table, n_queries, host_items);
+   execute_test(table, n_queries, host_items, zipfian, alpha);
 
    //uint64_t * access_data = generate_data<uint64_t>(n_ops);
 

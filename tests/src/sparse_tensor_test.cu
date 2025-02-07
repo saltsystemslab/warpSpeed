@@ -65,50 +65,59 @@ __host__ void execute_test(std::string table, std::string input_file, uint64_t n
 
    if (table == "p2"){
 
-      tensor_contraction<4,1,hashing_project::tables::p2_ext_generic, 8, 32>(input_file, n_indices_output);
+      //nips 2
+      double first = tensor_contraction_nips_2<hashing_project::tables::p2_ext_generic, 8, 32>(input_file, n_indices_output);
 
-      tensor_contraction<4,3,hashing_project::tables::p2_ext_generic, 8, 32>(input_file, n_indices_output);
+      //nips 013
+      double second = tensor_contraction_nips_013<hashing_project::tables::p2_ext_generic, 8, 32>(input_file, n_indices_output);
 
+      printf("%s %f %f\n", table.c_str(), first, second);
       //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
    } else if (table == "p2MD"){
 
-      tensor_contraction<4,1,hashing_project::tables::md_p2_generic, 4, 32>(input_file, n_indices_output);
+      double first = tensor_contraction_nips_2<hashing_project::tables::md_p2_generic, 4, 32>(input_file, n_indices_output);
 
-      tensor_contraction<4,3,hashing_project::tables::md_p2_generic, 4, 32>(input_file, n_indices_output);
+      double second = tensor_contraction_nips_013<hashing_project::tables::md_p2_generic, 4, 32>(input_file, n_indices_output);
 
+      printf("%s %f %f\n", table.c_str(), first, second);
 
    } else if (table == "double"){
 
-      tensor_contraction<4,1,hashing_project::tables::double_generic, 4, 8>(input_file, n_indices_output);
+      double first = tensor_contraction_nips_2<hashing_project::tables::double_generic, 4, 8>(input_file, n_indices_output);
 
-      tensor_contraction<4,3,hashing_project::tables::double_generic, 4, 8>(input_file, n_indices_output);
+      double second = tensor_contraction_nips_013<hashing_project::tables::double_generic, 4, 8>(input_file, n_indices_output);
 
+      printf("%s %f %f\n", table.c_str(), first, second);
    } else if (table == "doubleMD"){
 
-      tensor_contraction<4,1,hashing_project::tables::md_double_generic, 4, 32>(input_file, n_indices_output);
+      double first = tensor_contraction_nips_2<hashing_project::tables::md_double_generic, 4, 32>(input_file, n_indices_output);
 
-      tensor_contraction<4,3,hashing_project::tables::md_double_generic, 4, 32>(input_file, n_indices_output);
+      double second = tensor_contraction_nips_013<hashing_project::tables::md_double_generic, 4, 32>(input_file, n_indices_output);
 
+      printf("%s %f %f\n", table.c_str(), first, second);
 
    } else if (table == "iceberg"){
 
-      tensor_contraction<4,1,hashing_project::tables::iht_p2_generic, 8, 32>(input_file, n_indices_output);
+      double first = tensor_contraction_nips_2<hashing_project::tables::iht_p2_generic, 8, 32>(input_file, n_indices_output);
       
-      tensor_contraction<4,3,hashing_project::tables::iht_p2_generic, 8, 32>(input_file, n_indices_output);
+      double second = tensor_contraction_nips_013<hashing_project::tables::iht_p2_generic, 8, 32>(input_file, n_indices_output);
   
+      printf("%s %f %f\n", table.c_str(), first, second);
    } else if (table == "icebergMD"){
 
-      tensor_contraction<4,1,hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
+      double first = tensor_contraction_nips_2<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
 
-      tensor_contraction<4,3,hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
+      double second = tensor_contraction_nips_013<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
  
+      printf("%s %f %f\n", table.c_str(), first, second);
    } else if (table == "chaining"){
 
-      tensor_contraction<4,1,hashing_project::tables::chaining_generic, 4, 8>(input_file, n_indices_output, true);
+      double first = tensor_contraction_nips_2<hashing_project::tables::chaining_generic, 4, 8>(input_file, n_indices_output, true);
 
-      tensor_contraction<4,3,hashing_project::tables::chaining_generic, 4, 8>(input_file, n_indices_output);
+      double second = tensor_contraction_nips_013<hashing_project::tables::chaining_generic, 4, 8>(input_file, n_indices_output);
 
+      printf("%s %f %f\n", table.c_str(), first, second);
    } else {
       throw std::runtime_error("Unknown table");
    }

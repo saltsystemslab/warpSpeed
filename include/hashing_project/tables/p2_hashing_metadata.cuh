@@ -112,6 +112,8 @@ namespace tables {
 
       //uint64_t lock_and_size;
 
+      static const Key holdingKey = tombstoneKey-1;
+
       using pair_type = ht_pair<Key, Val>;
 
       pair_type slots[bucket_size];
@@ -205,11 +207,14 @@ namespace tables {
 
                   ballot_exists = true;
 
-                  ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, defaultKey, holdingKey);
                   ADD_PROBE
                   if (ballot){
 
-                     ht_store(&slots[i].val, ext_val);
+                     //ht_store(&slots[i].val, ext_val);
+
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                } 
@@ -228,7 +233,7 @@ namespace tables {
 
                   ballot_exists = true;
 
-                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, holdingKey);
                   ADD_PROBE
 
                   if (ballot){
@@ -246,7 +251,9 @@ namespace tables {
 
                      // __threadfence();
 
-                     ht_store(&slots[i].val, ext_val);
+                     //ht_store(&slots[i].val, ext_val);
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
 
 
                   }
@@ -1429,13 +1436,16 @@ namespace tables {
 
                      ADD_PROBE
 
-                     Key loaded_key = hash_table_load(&primary_bucket->slots[i*4+j].key);
+                     //Key loaded_key = hash_table_load(&primary_bucket->slots[i*4+j].key);
 
-                     if (loaded_key == upsert_key){
+                     auto loaded_pair = ht_load_packed_pair(&primary_bucket->slots[i*4+j]);
+
+                     if (loaded_pair.key == upsert_key){
 
                         found = true;
 
-                        val = hash_table_load(&primary_bucket->slots[i*4+j].val);
+                        val = loaded_pair.val;
+                        //hash_table_load(&primary_bucket->slots[i*4+j].val);
 
                      }
 
@@ -1511,13 +1521,15 @@ namespace tables {
 
                      ADD_PROBE
 
-                     Key loaded_key = hash_table_load(&primary_bucket->slots[i*8+j].key);
+                     //Key loaded_key = hash_table_load(&primary_bucket->slots[i*8+j].key);
+                     auto loaded_pair = ht_load_packed_pair(&primary_bucket->slots[i*8+j]);
 
-                     if (loaded_key == upsert_key){
+                     if (loaded_pair.key == upsert_key){
 
                         found = true;
 
-                        val = hash_table_load(&primary_bucket->slots[i*8+j].val);
+                        val = loaded_pair.val;
+                        // hash_table_load(&primary_bucket->slots[i*8+j].val);
 
                      }
 
@@ -2164,18 +2176,20 @@ namespace tables {
                   // }
                   ADD_PROBE
 
-                  #if ATOMIC_VERIFY
+                  ht_store_packed_pair(&bucket_0_ptr->slots[tombstone_pos], {key,val});
 
-                  if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos].key, tombstoneKey, key)){
+                  // #if ATOMIC_VERIFY
 
-                     uint16_t my_tag = md_bucket_0->get_tag(key);
-                     printf("Failed to replace tombstone %u\n\n", my_tag);
-                  }
+                  // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos].key, tombstoneKey, key)){
 
-                  #else
-                  ht_store(&bucket_0_ptr->slots[tombstone_pos].key, key);
-                  #endif
-                  ht_store(&bucket_0_ptr->slots[tombstone_pos].val, val);
+                  //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                  //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                  // }
+
+                  // #else
+                  // ht_store(&bucket_0_ptr->slots[tombstone_pos].key, key);
+                  // #endif
+                  // ht_store(&bucket_0_ptr->slots[tombstone_pos].val, val);
 
                   __threadfence();
 
@@ -2196,17 +2210,19 @@ namespace tables {
                   // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos].key, defaultKey, key)){
                   //    printf("Failed to replace empty\n");
                   // }
+
+                  ht_store_packed_pair(&bucket_0_ptr->slots[empty_pos], {key,val});
                   ADD_PROBE
 
-                  #if ATOMIC_VERIFY
-                  if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos].key, defaultKey, key)){
-                     printf("Failed to replace empty\n");
-                  }
-                  #else
-                  ht_store(&bucket_0_ptr->slots[empty_pos].key, key);
+                  // #if ATOMIC_VERIFY
+                  // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos].key, defaultKey, key)){
+                  //    printf("Failed to replace empty\n");
+                  // }
+                  // #else
+                  // ht_store(&bucket_0_ptr->slots[empty_pos].key, key);
 
-                  #endif
-                  ht_store(&bucket_0_ptr->slots[empty_pos].val, val);
+                  // #endif
+                  // ht_store(&bucket_0_ptr->slots[empty_pos].val, val);
 
                   __threadfence();
 
@@ -2332,19 +2348,19 @@ namespace tables {
 
                      ADD_PROBE
 
+                     ht_store_packed_pair(&bucket_0_ptr->slots[tombstone_pos_0], {key,val});
+                     // #if ATOMIC_VERIFY
 
-                     #if ATOMIC_VERIFY
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos_0].key, tombstoneKey, key)){
 
-                     if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos_0].key, tombstoneKey, key)){
+                     //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                     //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                     // }
 
-                        uint16_t my_tag = md_bucket_0->get_tag(key);
-                        printf("Failed to replace tombstone %u\n\n", my_tag);
-                     }
-
-                     #else
-                     ht_store(&bucket_0_ptr->slots[tombstone_pos_0].key, key);
-                     #endif
-                     ht_store(&bucket_0_ptr->slots[tombstone_pos_0].val, val);
+                     // #else
+                     // ht_store(&bucket_0_ptr->slots[tombstone_pos_0].key, key);
+                     // #endif
+                     // ht_store(&bucket_0_ptr->slots[tombstone_pos_0].val, val);
 
                      __threadfence();
 
@@ -2362,17 +2378,19 @@ namespace tables {
                   if (my_tile.thread_rank()  == (empty_pos_0 % partition_size)){
 
                      ADD_PROBE
+
+                     ht_store_packed_pair(&bucket_0_ptr->slots[empty_pos_0], {key,val});
                      
-                     #if ATOMIC_VERIFY
-                     if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos_0].key, defaultKey, key)){
-                        printf("Failed to replace empty\n");
-                     }
-                     #else
-                     ht_store(&bucket_0_ptr->slots[empty_pos_0].key, key);
+                     // #if ATOMIC_VERIFY
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos_0].key, defaultKey, key)){
+                     //    printf("Failed to replace empty\n");
+                     // }
+                     // #else
+                     // ht_store(&bucket_0_ptr->slots[empty_pos_0].key, key);
 
-                     #endif
+                     // #endif
 
-                     ht_store(&bucket_0_ptr->slots[empty_pos_0].val, val);
+                     // ht_store(&bucket_0_ptr->slots[empty_pos_0].val, val);
 
                      __threadfence();
 
@@ -2395,20 +2413,20 @@ namespace tables {
 
                      ADD_PROBE
 
+                     ht_store_packed_pair(&bucket_1_ptr->slots[tombstone_pos_1], {key,val});
+                     // #if ATOMIC_VERIFY
 
-                     #if ATOMIC_VERIFY
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[tombstone_pos_1].key, tombstoneKey, key)){
 
-                     if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[tombstone_pos_1].key, tombstoneKey, key)){
+                     //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                     //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                     // }
 
-                        uint16_t my_tag = md_bucket_0->get_tag(key);
-                        printf("Failed to replace tombstone %u\n\n", my_tag);
-                     }
-
-                     #else
-                     ht_store(&bucket_1_ptr->slots[tombstone_pos_1].key, key);
-                     #endif
+                     // #else
+                     // ht_store(&bucket_1_ptr->slots[tombstone_pos_1].key, key);
+                     // #endif
          
-                     ht_store(&bucket_1_ptr->slots[tombstone_pos_1].val, val);
+                     // ht_store(&bucket_1_ptr->slots[tombstone_pos_1].val, val);
 
                      __threadfence();
 
@@ -2427,17 +2445,17 @@ namespace tables {
 
                      ADD_PROBE
                      
+                     ht_store_packed_pair(&bucket_1_ptr->slots[empty_pos_1], {key,val});
+                     // #if ATOMIC_VERIFY
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[empty_pos_1].key, defaultKey, key)){
+                     //    printf("Failed to replace empty\n");
+                     // }
+                     // #else
+                     // ht_store(&bucket_1_ptr->slots[empty_pos_1].key, key);
 
-                     #if ATOMIC_VERIFY
-                     if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[empty_pos_1].key, defaultKey, key)){
-                        printf("Failed to replace empty\n");
-                     }
-                     #else
-                     ht_store(&bucket_1_ptr->slots[empty_pos_1].key, key);
+                     // #endif
 
-                     #endif
-
-                     ht_store(&bucket_1_ptr->slots[empty_pos_1].val, val);
+                     // ht_store(&bucket_1_ptr->slots[empty_pos_1].val, val);
 
                      __threadfence();
 
@@ -2601,18 +2619,20 @@ namespace tables {
                   // }
                   ADD_PROBE
 
-                  #if ATOMIC_VERIFY
+                  ht_store_packed_pair(&bucket_0_ptr->slots[tombstone_pos], {key,val});
 
-                  if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos].key, tombstoneKey, key)){
+                  // #if ATOMIC_VERIFY
 
-                     uint16_t my_tag = md_bucket_0->get_tag(key);
-                     printf("Failed to replace tombstone %u\n\n", my_tag);
-                  }
+                  // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos].key, tombstoneKey, key)){
 
-                  #else
-                  ht_store(&bucket_0_ptr->slots[tombstone_pos].key, key);
-                  #endif
-                  ht_store(&bucket_0_ptr->slots[tombstone_pos].val, val);
+                  //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                  //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                  // }
+
+                  // #else
+                  // ht_store(&bucket_0_ptr->slots[tombstone_pos].key, key);
+                  // #endif
+                  // ht_store(&bucket_0_ptr->slots[tombstone_pos].val, val);
 
                   __threadfence();
 
@@ -2635,15 +2655,17 @@ namespace tables {
                   // }
                   ADD_PROBE
 
-                  #if ATOMIC_VERIFY
-                  if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos].key, defaultKey, key)){
-                     printf("Failed to replace empty\n");
-                  }
-                  #else
-                  ht_store(&bucket_0_ptr->slots[empty_pos].key, key);
+                  ht_store_packed_pair(&bucket_0_ptr->slots[empty_pos], {key,val});
 
-                  #endif
-                  ht_store(&bucket_0_ptr->slots[empty_pos].val, val);
+                  // #if ATOMIC_VERIFY
+                  // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos].key, defaultKey, key)){
+                  //    printf("Failed to replace empty\n");
+                  // }
+                  // #else
+                  // ht_store(&bucket_0_ptr->slots[empty_pos].key, key);
+
+                  // #endif
+                  // ht_store(&bucket_0_ptr->slots[empty_pos].val, val);
 
                   __threadfence();
 
@@ -2769,19 +2791,20 @@ namespace tables {
 
                      ADD_PROBE
 
+                     ht_store_packed_pair(&bucket_0_ptr->slots[tombstone_pos_0], {key,val});
 
-                     #if ATOMIC_VERIFY
+                     // #if ATOMIC_VERIFY
 
-                     if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos_0].key, tombstoneKey, key)){
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos_0].key, tombstoneKey, key)){
 
-                        uint16_t my_tag = md_bucket_0->get_tag(key);
-                        printf("Failed to replace tombstone %u\n\n", my_tag);
-                     }
+                     //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                     //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                     // }
 
-                     #else
-                     ht_store(&bucket_0_ptr->slots[tombstone_pos_0].key, key);
-                     #endif
-                     ht_store(&bucket_0_ptr->slots[tombstone_pos_0].val, val);
+                     // #else
+                     // ht_store(&bucket_0_ptr->slots[tombstone_pos_0].key, key);
+                     // #endif
+                     // ht_store(&bucket_0_ptr->slots[tombstone_pos_0].val, val);
 
                      __threadfence();
 
@@ -2799,17 +2822,19 @@ namespace tables {
                   if (my_tile.thread_rank()  == (empty_pos_0 % partition_size)){
 
                      ADD_PROBE
+
+                     ht_store_packed_pair(&bucket_0_ptr->slots[empty_pos_0], {key,val});
                      
-                     #if ATOMIC_VERIFY
-                     if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos_0].key, defaultKey, key)){
-                        printf("Failed to replace empty\n");
-                     }
-                     #else
-                     ht_store(&bucket_0_ptr->slots[empty_pos_0].key, key);
+                     // #if ATOMIC_VERIFY
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos_0].key, defaultKey, key)){
+                     //    printf("Failed to replace empty\n");
+                     // }
+                     // #else
+                     // ht_store(&bucket_0_ptr->slots[empty_pos_0].key, key);
 
-                     #endif
+                     // #endif
 
-                     ht_store(&bucket_0_ptr->slots[empty_pos_0].val, val);
+                     // ht_store(&bucket_0_ptr->slots[empty_pos_0].val, val);
 
                      __threadfence();
 
@@ -2832,20 +2857,21 @@ namespace tables {
 
                      ADD_PROBE
 
+                     ht_store_packed_pair(&bucket_1_ptr->slots[tombstone_pos_1], {key,val});
 
-                     #if ATOMIC_VERIFY
+                     // #if ATOMIC_VERIFY
 
-                     if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[tombstone_pos_1].key, tombstoneKey, key)){
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[tombstone_pos_1].key, tombstoneKey, key)){
 
-                        uint16_t my_tag = md_bucket_0->get_tag(key);
-                        printf("Failed to replace tombstone %u\n\n", my_tag);
-                     }
+                     //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                     //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                     // }
 
-                     #else
-                     ht_store(&bucket_1_ptr->slots[tombstone_pos_1].key, key);
-                     #endif
+                     // #else
+                     // ht_store(&bucket_1_ptr->slots[tombstone_pos_1].key, key);
+                     // #endif
          
-                     ht_store(&bucket_1_ptr->slots[tombstone_pos_1].val, val);
+                     // ht_store(&bucket_1_ptr->slots[tombstone_pos_1].val, val);
 
                      __threadfence();
 
@@ -2864,17 +2890,18 @@ namespace tables {
 
                      ADD_PROBE
                      
+                     ht_store_packed_pair(&bucket_1_ptr->slots[empty_pos_1], {key,val});
 
-                     #if ATOMIC_VERIFY
-                     if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[empty_pos_1].key, defaultKey, key)){
-                        printf("Failed to replace empty\n");
-                     }
-                     #else
-                     ht_store(&bucket_1_ptr->slots[empty_pos_1].key, key);
+                     // #if ATOMIC_VERIFY
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[empty_pos_1].key, defaultKey, key)){
+                     //    printf("Failed to replace empty\n");
+                     // }
+                     // #else
+                     // ht_store(&bucket_1_ptr->slots[empty_pos_1].key, key);
 
-                     #endif
+                     // #endif
 
-                     ht_store(&bucket_1_ptr->slots[empty_pos_1].val, val);
+                     // ht_store(&bucket_1_ptr->slots[empty_pos_1].val, val);
 
                      __threadfence();
 
@@ -3033,18 +3060,20 @@ namespace tables {
                   // }
                   ADD_PROBE
 
-                  #if ATOMIC_VERIFY
+                  ht_store_packed_pair(&bucket_0_ptr->slots[tombstone_pos], {key,val});
 
-                  if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos].key, tombstoneKey, key)){
+                  // #if ATOMIC_VERIFY
 
-                     uint16_t my_tag = md_bucket_0->get_tag(key);
-                     printf("Failed to replace tombstone %u\n\n", my_tag);
-                  }
+                  // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos].key, tombstoneKey, key)){
 
-                  #else
-                  ht_store(&bucket_0_ptr->slots[tombstone_pos].key, key);
-                  #endif
-                  ht_store(&bucket_0_ptr->slots[tombstone_pos].val, val);
+                  //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                  //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                  // }
+
+                  // #else
+                  // ht_store(&bucket_0_ptr->slots[tombstone_pos].key, key);
+                  // #endif
+                  // ht_store(&bucket_0_ptr->slots[tombstone_pos].val, val);
 
                   __threadfence();
 
@@ -3067,15 +3096,17 @@ namespace tables {
                   // }
                   ADD_PROBE
 
-                  #if ATOMIC_VERIFY
-                  if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos].key, defaultKey, key)){
-                     printf("Failed to replace empty\n");
-                  }
-                  #else
-                  ht_store(&bucket_0_ptr->slots[empty_pos].key, key);
+                  ht_store_packed_pair(&bucket_0_ptr->slots[empty_pos], {key,val});
 
-                  #endif
-                  ht_store(&bucket_0_ptr->slots[empty_pos].val, val);
+                  // #if ATOMIC_VERIFY
+                  // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos].key, defaultKey, key)){
+                  //    printf("Failed to replace empty\n");
+                  // }
+                  // #else
+                  // ht_store(&bucket_0_ptr->slots[empty_pos].key, key);
+
+                  // #endif
+                  // ht_store(&bucket_0_ptr->slots[empty_pos].val, val);
 
                   __threadfence();
 
@@ -3201,18 +3232,21 @@ namespace tables {
                      ADD_PROBE
 
 
-                     #if ATOMIC_VERIFY
+                     ht_store_packed_pair(&bucket_0_ptr->slots[tombstone_pos_0], {key,val});
 
-                     if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos_0].key, tombstoneKey, key)){
 
-                        uint16_t my_tag = md_bucket_0->get_tag(key);
-                        printf("Failed to replace tombstone %u\n\n", my_tag);
-                     }
+                     // #if ATOMIC_VERIFY
 
-                     #else
-                     ht_store(&bucket_0_ptr->slots[tombstone_pos_0].key, key);
-                     #endif
-                     ht_store(&bucket_0_ptr->slots[tombstone_pos_0].val, val);
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[tombstone_pos_0].key, tombstoneKey, key)){
+
+                     //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                     //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                     // }
+
+                     // #else
+                     // ht_store(&bucket_0_ptr->slots[tombstone_pos_0].key, key);
+                     // #endif
+                     // ht_store(&bucket_0_ptr->slots[tombstone_pos_0].val, val);
 
                      __threadfence();
 
@@ -3230,17 +3264,19 @@ namespace tables {
                   if (my_tile.thread_rank()  == (empty_pos_0 % partition_size)){
 
                      ADD_PROBE
+
+                     ht_store_packed_pair(&bucket_0_ptr->slots[empty_pos_0], {key,val});
                      
-                     #if ATOMIC_VERIFY
-                     if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos_0].key, defaultKey, key)){
-                        printf("Failed to replace empty\n");
-                     }
-                     #else
-                     ht_store(&bucket_0_ptr->slots[empty_pos_0].key, key);
+                     // #if ATOMIC_VERIFY
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_0_ptr->slots[empty_pos_0].key, defaultKey, key)){
+                     //    printf("Failed to replace empty\n");
+                     // }
+                     // #else
+                     // ht_store(&bucket_0_ptr->slots[empty_pos_0].key, key);
 
-                     #endif
+                     // #endif
 
-                     ht_store(&bucket_0_ptr->slots[empty_pos_0].val, val);
+                     // ht_store(&bucket_0_ptr->slots[empty_pos_0].val, val);
 
                      __threadfence();
 
@@ -3263,20 +3299,21 @@ namespace tables {
 
                      ADD_PROBE
 
+                     ht_store_packed_pair(&bucket_1_ptr->slots[tombstone_pos_1], {key,val});
 
-                     #if ATOMIC_VERIFY
+                     // #if ATOMIC_VERIFY
 
-                     if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[tombstone_pos_1].key, tombstoneKey, key)){
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[tombstone_pos_1].key, tombstoneKey, key)){
 
-                        uint16_t my_tag = md_bucket_0->get_tag(key);
-                        printf("Failed to replace tombstone %u\n\n", my_tag);
-                     }
+                     //    uint16_t my_tag = md_bucket_0->get_tag(key);
+                     //    printf("Failed to replace tombstone %u\n\n", my_tag);
+                     // }
 
-                     #else
-                     ht_store(&bucket_1_ptr->slots[tombstone_pos_1].key, key);
-                     #endif
+                     // #else
+                     // ht_store(&bucket_1_ptr->slots[tombstone_pos_1].key, key);
+                     // #endif
          
-                     ht_store(&bucket_1_ptr->slots[tombstone_pos_1].val, val);
+                     // ht_store(&bucket_1_ptr->slots[tombstone_pos_1].val, val);
 
                      __threadfence();
 
@@ -3294,18 +3331,21 @@ namespace tables {
                   if (my_tile.thread_rank()  == (empty_pos_1 % partition_size)){
 
                      ADD_PROBE
+
+
+                     ht_store_packed_pair(&bucket_1_ptr->slots[empty_pos_1], {key,val});
                      
 
-                     #if ATOMIC_VERIFY
-                     if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[empty_pos_1].key, defaultKey, key)){
-                        printf("Failed to replace empty\n");
-                     }
-                     #else
-                     ht_store(&bucket_1_ptr->slots[empty_pos_1].key, key);
+                     // #if ATOMIC_VERIFY
+                     // if (!gallatin::utils::typed_atomic_write(&bucket_1_ptr->slots[empty_pos_1].key, defaultKey, key)){
+                     //    printf("Failed to replace empty\n");
+                     // }
+                     // #else
+                     // ht_store(&bucket_1_ptr->slots[empty_pos_1].key, key);
 
-                     #endif
+                     // #endif
 
-                     ht_store(&bucket_1_ptr->slots[empty_pos_1].val, val);
+                     // ht_store(&bucket_1_ptr->slots[empty_pos_1].val, val);
 
                      __threadfence();
 
@@ -3365,7 +3405,6 @@ namespace tables {
          uint64_t key_hash = hash(&key, sizeof(Key), seed);
          uint64_t bucket_0 = get_first_bucket(key_hash);
 
-         stall_lock(my_tile, bucket_0);
 
          md_bucket_type * md_bucket_0 = get_metadata(bucket_0);
 
@@ -3386,7 +3425,6 @@ namespace tables {
 
          if (md_bucket_0->query_md_and_bucket_large(my_tile, key, val, bucket_0_ptr)){
 
-            unlock(my_tile, bucket_0);
             return true;
          }
 
@@ -3416,14 +3454,12 @@ namespace tables {
 
          if (md_bucket_1->query_md_and_bucket_large(my_tile, key, val, bucket_1_ptr)){
 
-            unlock(my_tile, bucket_0);
             return true;
          }
 
          // if (bucket_0_ptr->query(my_tile, key, val)) return true;
          // if (bucket_1_ptr->query(my_tile, key, val)) return true;
 
-         unlock(my_tile, bucket_0);
          return false;
 
       }
@@ -3475,8 +3511,6 @@ namespace tables {
          uint64_t key_hash = hash(&key, sizeof(Key), seed);
          uint64_t bucket_0 = get_first_bucket(key_hash);
 
-         stall_lock(my_tile, bucket_0);
-
          md_bucket_type * md_bucket_0 = get_metadata(bucket_0);
 
          bucket_type * bucket_0_ptr = get_bucket_ptr(bucket_0);
@@ -3487,8 +3521,6 @@ namespace tables {
          packed_pair_type * return_pair = md_bucket_0->query_md_and_bucket_pair(my_tile, key, bucket_0_ptr);
 
          if (return_pair != nullptr){
-
-            unlock(my_tile, bucket_0);
             return return_pair;
          }
 
@@ -3498,8 +3530,6 @@ namespace tables {
          bucket_type * bucket_1_ptr = get_bucket_ptr(bucket_1);
 
          return_pair = md_bucket_1->query_md_and_bucket_pair(my_tile, key, bucket_1_ptr);
-
-         unlock(my_tile, bucket_0);
 
          return return_pair;
 

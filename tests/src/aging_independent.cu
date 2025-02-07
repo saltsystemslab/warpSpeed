@@ -494,7 +494,7 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
 
    cudaDeviceSynchronize();
 
-   printf("Starting test for %s, inserting %lu keys\n", ht_type::get_name(), keys_for_fill);;
+   printf("Starting test for %s, inserting %lu keys\n", ht_type::get_name().c_str(), keys_for_fill);;
 
    gallatin::utils::timer upsert_timing;
 
@@ -895,6 +895,8 @@ int main(int argc, char** argv) {
 
 
    std::cout << "Running aging test (measure all) with table " << table << " and " << table_capacity << " slots." << std::endl;
+
+   fs::create_directory("results/sawtooth_" + std::to_string(n_rounds));
 
    execute_test(table, table_capacity, n_rounds, init_fill, replacement_rate);
 

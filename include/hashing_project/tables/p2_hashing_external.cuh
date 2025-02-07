@@ -84,6 +84,7 @@ namespace tables {
    struct p2_bucket {
 
       //uint64_t lock_and_size;
+      static const Key holdingKey = tombstoneKey-1;
 
       using pair_type = ht_pair<Key, Val>;
 
@@ -274,11 +275,13 @@ namespace tables {
 
                   ballot_exists = true;
 
-                  ballot = typed_atomic_write(&slots[i].key, defaultKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, defaultKey, holdingKey);
                   ADD_PROBE
                   if (ballot){
 
-                     ht_store(&slots[i].val, ext_val);
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
+                     //ht_store(&slots[i].val, ext_val);
                      //typed_atomic_exchange(&slots[i].val, ext_val);
                   }
                } 
@@ -297,7 +300,7 @@ namespace tables {
 
                   ballot_exists = true;
 
-                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, ext_key);
+                  ballot = typed_atomic_write(&slots[i].key, tombstoneKey, holdingKey);
                   ADD_PROBE
 
                   if (ballot){
@@ -314,8 +317,10 @@ namespace tables {
                      // }
 
                      // __threadfence();
+                     ht_store_packed_pair(&slots[i], {ext_key, ext_val});
+                     __threadfence();
 
-                     ht_store(&slots[i].val, ext_val);
+                     //ht_store(&slots[i].val, ext_val);
 
 
                   }
@@ -592,8 +597,11 @@ namespace tables {
 
                ADD_PROBE
 
-               if (gallatin::utils::typed_atomic_write(&slots[i].key, defaultKey, upsert_key)){
-                  ht_store(&slots[i].val, upsert_val);
+               if (gallatin::utils::typed_atomic_write(&slots[i].key, defaultKey, holdingKey)){
+                  
+                  ht_store_packed_pair(&slots[i], {upsert_key, upsert_val});
+                  __threadfence();
+                  //ht_store(&slots[i].val, upsert_val);
                   ballot = true;
                }
 
@@ -673,8 +681,11 @@ namespace tables {
 
                ADD_PROBE
 
-               if (gallatin::utils::typed_atomic_write(&slots[i].key, defaultKey, upsert_key)){
-                  ht_store(&slots[i].val, upsert_val);
+               if (gallatin::utils::typed_atomic_write(&slots[i].key, defaultKey, holdingKey)){
+                  
+                  ht_store_packed_pair(&slots[i], {upsert_key, upsert_val});
+                  __threadfence();
+                  //ht_store(&slots[i].val, upsert_val);
                   ballot = true;
                }
 
@@ -1414,15 +1425,13 @@ namespace tables {
 
          uint64_t bucket_0 = get_first_bucket(key_hash);
 
-         stall_lock(my_tile, bucket_0);
-
          bucket_type * bucket_0_ptr = get_bucket_ptr(bucket_0);
          
          // #if COUNT_INSERT_PROBES
          // ADD_PROBE_BUCKET
          // #endif
          if (bucket_0_ptr->query(my_tile, key, val)){
-            unlock(my_tile, bucket_0);
+
             return true;
          }
 
@@ -1435,11 +1444,8 @@ namespace tables {
          // ADD_PROBE_BUCKET
          // #endif
          if (bucket_1_ptr->query(my_tile, key ,val)){
-            unlock(my_tile, bucket_0);
             return true;
          } 
-
-         unlock(my_tile, bucket_0);
 
          return false;
       }
@@ -1552,8 +1558,6 @@ namespace tables {
 
          uint64_t bucket_0 = get_first_bucket(key_hash);
 
-         stall_lock(my_tile, bucket_0);
-
          packed_pair_type * return_pair = nullptr;
 
          bucket_type * bucket_0_ptr = get_bucket_ptr(bucket_0);
@@ -1564,8 +1568,6 @@ namespace tables {
 
          return_pair = bucket_0_ptr->query_pair(my_tile, key);
          if (return_pair != nullptr){
-            
-            unlock(my_tile, bucket_0);
             return return_pair;
          }
 
@@ -1579,11 +1581,8 @@ namespace tables {
          // #endif
          return_pair = bucket_1_ptr->query_pair(my_tile, key);
          if (return_pair != nullptr){
-            unlock(my_tile, bucket_0);
             return return_pair;
          }
-
-         unlock(my_tile, bucket_0);
 
          return nullptr;
       }

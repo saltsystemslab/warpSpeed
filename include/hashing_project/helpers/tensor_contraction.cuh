@@ -749,7 +749,7 @@ __global__ void local_contract(coo_matrix<n_dims> * x_mat, ht_type * y_mat, coo_
 
 
 template <int n_dims, int contraction_dims, template<typename, typename, uint, uint> typename hash_table_type, uint tile_size, uint bucket_size>
-__host__ void tensor_contraction(std::string filename, uint64_t accumulator_nslots, bool table_uses_allocator=false){
+__host__ double tensor_contraction(std::string filename, uint64_t accumulator_nslots, bool table_uses_allocator=false){
 
 	constexpr int leftover_dims = n_dims-contraction_dims;
 	constexpr int output_dims = leftover_dims*2;
@@ -831,7 +831,7 @@ __host__ void tensor_contraction(std::string filename, uint64_t accumulator_nslo
 	cudaDeviceSynchronize();
 
 
-	printf("%s starting\n", ht_type::get_name());
+	printf("%s starting\n", ht_type::get_name().c_str());
 
 
 	gallatin::utils::timer convert_timing;
@@ -911,8 +911,359 @@ __host__ void tensor_contraction(std::string filename, uint64_t accumulator_nslo
 
 	gallatin::allocators::free_global_allocator();
 
+	return convert_timing.elapsed()+contract_timing.elapsed();
+
 
 }
+
+
+template <template<typename, typename, uint, uint> typename hash_table_type, uint tile_size, uint bucket_size>
+__host__ double tensor_contraction_nips_2(std::string filename, uint64_t accumulator_nslots, bool table_uses_allocator=false){
+
+	constexpr int n_dims = 4;
+	constexpr int contraction_dims = 1;
+
+	constexpr int leftover_dims = n_dims-contraction_dims;
+	constexpr int output_dims = leftover_dims*2;
+	using lower_COO = COO<leftover_dims>;
+
+	using output_COO = COO<output_dims>;
+
+	using vector_type = hashing_project::data_structs::cuckoo_vector<lower_COO>;
+	using ht_type = hash_table_type<uint64_t, uint64_t, tile_size, bucket_size>;
+
+
+
+
+	using output_mat_type = coo_matrix<output_dims>;
+
+
+	if (table_uses_allocator){
+		//if the table uses the allocator the allocator-table ratio is different - give more space to allocator
+		gallatin::allocators::init_global_allocator(24ULL*1024*1024*1024, 111);
+	} else {
+		gallatin::allocators::init_global_allocator(16ULL*1024*1024*1024, 111);
+	}
+	
+
+
+	coo_matrix<n_dims> x_mat(filename);
+
+	//0 1 2 3 -> 0 1 3 2
+	x_mat.swap_dims(2, 3);
+
+	coo_matrix<n_dims> y_mat(x_mat);
+
+
+	//shuffle dimensions - bring the last n_dimensions forward.
+
+	//this works! basically a backwards memcpy.
+
+	int stride = n_dims-contraction_dims;
+
+	//swap to 2 0 1 3
+	for (int i =0; i < contraction_dims; i++){
+
+		//dim we want to step into.
+		int swap_dim = i;
+		int alt_swap_dim = i+stride;
+
+		y_mat.swap_dims(swap_dim, alt_swap_dim);
+
+	}
+
+
+	output_mat_type output_mat;
+
+	output_mat.set_dimensions(x_mat, y_mat, contraction_dims);
+
+	printf("Xmat: %u %u %u %u\n", x_mat.maxDims[0], x_mat.maxDims[1], x_mat.maxDims[2], x_mat.maxDims[3]);
+	printf("Ymat: %u %u %u %u\n", y_mat.maxDims[0], y_mat.maxDims[1], y_mat.maxDims[2], y_mat.maxDims[3]);
+
+	printf("Output mat: ");
+	output_mat.print_dims();
+	//now construct table.
+
+	//table needs enough slots for the dimensions covered?
+	//90\% load will never be exceeded if we use n_items.
+	uint64_t n_slots= y_mat.n_items*1.10;
+
+	ht_type * indirection_table = ht_type::generate_on_device(n_slots, 999);
+
+
+	coo_matrix<n_dims> * y_mat_device = gallatin::utils::get_device_version<coo_matrix<n_dims>>();
+	cudaMemcpy(y_mat_device, &y_mat, sizeof(coo_matrix<n_dims>), cudaMemcpyHostToDevice);
+
+
+	coo_matrix<n_dims> * x_mat_device = gallatin::utils::get_device_version<coo_matrix<n_dims>>();
+	cudaMemcpy(x_mat_device, &x_mat, sizeof(coo_matrix<n_dims>), cudaMemcpyHostToDevice);
+
+	coo_matrix<output_dims> * output_mat_device = gallatin::utils::get_device_version<coo_matrix<output_dims>>();
+	cudaMemcpy(output_mat_device, &output_mat, sizeof(coo_matrix<output_dims>), cudaMemcpyHostToDevice);
+
+
+	cudaDeviceSynchronize();
+
+
+	printf("%s starting\n", ht_type::get_name().c_str());
+
+
+	gallatin::utils::timer convert_timing;
+
+	convert_to_ht<ht_type, lower_COO, vector_type, n_dims, contraction_dims, tile_size><<<(y_mat.n_items*tile_size-1)/256+1,256>>>(indirection_table, y_mat_device, y_mat.n_items);
+
+	convert_timing.sync_end();
+
+	convert_timing.print_throughput("Converted", y_mat.n_items);
+
+	indirection_table->print_fill();
+
+
+	//construct accumulator:
+
+	ht_type * accumulator = ht_type::generate_on_device(accumulator_nslots, 444);
+
+	//accumulator gathers uncontrolled indices
+
+	//store final output as full tensors in vector. inputCOO + outputCOO yields high dimension output.
+
+	//run 4 way tensor hash - yield exact key that maps to value.
+
+	// uint64_t * n_unique_headers;
+
+	// uint64_t * header_start = gallatin::utils::get_device_version<uint64_t>(x_mat.n_items);
+
+	//determine the slipping points?
+
+
+	// cudaMallocManaged((void **)&n_unique_headers, sizeof(uint64_t));
+
+	// n_unique_headers[0] = 0;
+
+
+
+	//cudaDeviceSynchronize();
+
+
+
+	// gallatin::utils::timer alt_comp_timing;
+
+	// determine_header_kernel<n_dims, contraction_dims><<<(x_mat.n_items-1)/256+1, 256>>>(x_mat_device, x_mat.n_items, n_unique_headers, header_start);
+
+
+	// //local_contract<ht_type, vector_type, n_dims, contraction_dims, output_dims, tile_size><<<x_mat.n_items*256,256>>>(x_mat_device, indirection_table, output_mat_device);
+
+
+	// alt_comp_timing.sync_end();
+
+	// alt_comp_timing.print_throughput("Alt loaded", x_mat.n_items);
+
+	// printf("%lu headers\n", n_unique_headers[0]);
+
+	cudaDeviceSynchronize();
+
+
+	gallatin::utils::timer contract_timing;
+
+
+	contract<ht_type, vector_type, n_dims, contraction_dims, output_dims, tile_size><<<(x_mat.n_items*tile_size-1)/256+1,256>>>(x_mat_device, indirection_table, accumulator, output_mat_device);
+
+
+	contract_timing.sync_end();
+
+
+	contract_timing.print_throughput("contracted", x_mat.n_items);
+	cudaDeviceSynchronize();
+
+	accumulator->print_fill();
+	//run kernel.
+
+	ht_type::free_on_device(indirection_table);
+
+	ht_type::free_on_device(accumulator);
+
+
+	gallatin::allocators::free_global_allocator();
+
+	return convert_timing.elapsed()+contract_timing.elapsed();
+
+
+}
+
+template <template<typename, typename, uint, uint> typename hash_table_type, uint tile_size, uint bucket_size>
+__host__ double tensor_contraction_nips_013(std::string filename, uint64_t accumulator_nslots, bool table_uses_allocator=false){
+
+	constexpr int n_dims = 4;
+	constexpr int contraction_dims = 3;
+
+
+	constexpr int leftover_dims = n_dims-contraction_dims;
+	constexpr int output_dims = leftover_dims*2;
+	using lower_COO = COO<leftover_dims>;
+
+	using output_COO = COO<output_dims>;
+
+	using vector_type = hashing_project::data_structs::cuckoo_vector<lower_COO>;
+	using ht_type = hash_table_type<uint64_t, uint64_t, tile_size, bucket_size>;
+
+
+
+
+	using output_mat_type = coo_matrix<output_dims>;
+
+
+	if (table_uses_allocator){
+		//if the table uses the allocator the allocator-table ratio is different - give more space to allocator
+		gallatin::allocators::init_global_allocator(24ULL*1024*1024*1024, 111);
+	} else {
+		gallatin::allocators::init_global_allocator(16ULL*1024*1024*1024, 111);
+	}
+	
+
+
+	coo_matrix<n_dims> x_mat(filename);
+
+	//0 1 2 3 -> 2 0 1 3
+	x_mat.swap_dims(0, 2);
+	x_mat.swap_dims(1,2);
+
+	coo_matrix<n_dims> y_mat(x_mat);
+
+
+	//shuffle dimensions - bring the last n_dimensions forward.
+
+	//this works! basically a backwards memcpy.
+
+	int stride = n_dims-contraction_dims;
+
+	for (int i =0; i < contraction_dims; i++){
+
+		//dim we want to step into.
+		int swap_dim = i;
+		int alt_swap_dim = i+stride;
+
+		y_mat.swap_dims(swap_dim, alt_swap_dim);
+
+	}
+
+
+	output_mat_type output_mat;
+
+	output_mat.set_dimensions(x_mat, y_mat, contraction_dims);
+
+	printf("Xmat: %u %u %u %u\n", x_mat.maxDims[0], x_mat.maxDims[1], x_mat.maxDims[2], x_mat.maxDims[3]);
+	printf("Ymat: %u %u %u %u\n", y_mat.maxDims[0], y_mat.maxDims[1], y_mat.maxDims[2], y_mat.maxDims[3]);
+
+	printf("Output mat: ");
+	output_mat.print_dims();
+	//now construct table.
+
+	//table needs enough slots for the dimensions covered?
+	//90\% load will never be exceeded if we use n_items.
+	uint64_t n_slots= y_mat.n_items*1.10;
+
+	ht_type * indirection_table = ht_type::generate_on_device(n_slots, 999);
+
+
+	coo_matrix<n_dims> * y_mat_device = gallatin::utils::get_device_version<coo_matrix<n_dims>>();
+	cudaMemcpy(y_mat_device, &y_mat, sizeof(coo_matrix<n_dims>), cudaMemcpyHostToDevice);
+
+
+	coo_matrix<n_dims> * x_mat_device = gallatin::utils::get_device_version<coo_matrix<n_dims>>();
+	cudaMemcpy(x_mat_device, &x_mat, sizeof(coo_matrix<n_dims>), cudaMemcpyHostToDevice);
+
+	coo_matrix<output_dims> * output_mat_device = gallatin::utils::get_device_version<coo_matrix<output_dims>>();
+	cudaMemcpy(output_mat_device, &output_mat, sizeof(coo_matrix<output_dims>), cudaMemcpyHostToDevice);
+
+
+	cudaDeviceSynchronize();
+
+
+	printf("%s starting\n", ht_type::get_name().c_str());
+
+
+	gallatin::utils::timer convert_timing;
+
+	convert_to_ht<ht_type, lower_COO, vector_type, n_dims, contraction_dims, tile_size><<<(y_mat.n_items*tile_size-1)/256+1,256>>>(indirection_table, y_mat_device, y_mat.n_items);
+
+	convert_timing.sync_end();
+
+	convert_timing.print_throughput("Converted", y_mat.n_items);
+
+	indirection_table->print_fill();
+
+
+	//construct accumulator:
+
+	ht_type * accumulator = ht_type::generate_on_device(accumulator_nslots, 444);
+
+	//accumulator gathers uncontrolled indices
+
+	//store final output as full tensors in vector. inputCOO + outputCOO yields high dimension output.
+
+	//run 4 way tensor hash - yield exact key that maps to value.
+
+	// uint64_t * n_unique_headers;
+
+	// uint64_t * header_start = gallatin::utils::get_device_version<uint64_t>(x_mat.n_items);
+
+	//determine the slipping points?
+
+
+	// cudaMallocManaged((void **)&n_unique_headers, sizeof(uint64_t));
+
+	// n_unique_headers[0] = 0;
+
+
+
+	//cudaDeviceSynchronize();
+
+
+
+	// gallatin::utils::timer alt_comp_timing;
+
+	// determine_header_kernel<n_dims, contraction_dims><<<(x_mat.n_items-1)/256+1, 256>>>(x_mat_device, x_mat.n_items, n_unique_headers, header_start);
+
+
+	// //local_contract<ht_type, vector_type, n_dims, contraction_dims, output_dims, tile_size><<<x_mat.n_items*256,256>>>(x_mat_device, indirection_table, output_mat_device);
+
+
+	// alt_comp_timing.sync_end();
+
+	// alt_comp_timing.print_throughput("Alt loaded", x_mat.n_items);
+
+	// printf("%lu headers\n", n_unique_headers[0]);
+
+	cudaDeviceSynchronize();
+
+
+	gallatin::utils::timer contract_timing;
+
+
+	contract<ht_type, vector_type, n_dims, contraction_dims, output_dims, tile_size><<<(x_mat.n_items*tile_size-1)/256+1,256>>>(x_mat_device, indirection_table, accumulator, output_mat_device);
+
+
+	contract_timing.sync_end();
+
+
+	contract_timing.print_throughput("contracted", x_mat.n_items);
+	cudaDeviceSynchronize();
+
+	accumulator->print_fill();
+	//run kernel.
+
+	ht_type::free_on_device(indirection_table);
+
+	ht_type::free_on_device(accumulator);
+
+
+	gallatin::allocators::free_global_allocator();
+
+	return convert_timing.elapsed()+contract_timing.elapsed();
+
+
+}
+
 
 
 
@@ -992,7 +1343,7 @@ __host__ void tensor_contraction_individual_ops(std::string filename, uint64_t a
 
 	cudaDeviceSynchronize();
 
-	printf("%s starting\n", ht_type::get_name());
+	printf("%s starting\n", ht_type::get_name().c_str());
 
 	gallatin::utils::timer convert_timing;
 

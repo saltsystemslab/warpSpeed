@@ -922,9 +922,6 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
 
       test_all_combinations<hashing_project::tables::p2_ext_generic>(table_capacity, access_pattern);
 
-      //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
-
-
    } else if (table == "p2MD"){
 
       test_all_combinations_md<hashing_project::tables::md_p2_generic>(table_capacity, access_pattern);

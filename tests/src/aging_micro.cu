@@ -11,7 +11,7 @@
 
 #define LOAD_CHEAP 0
 
-#define MEASURE_INDEPENDENT 1
+#define MEASURE_INDEPENDENT 0
 
 // #define COUNT_PROBES 1
 
@@ -438,7 +438,7 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
 
    uint64_t keys_for_fill = n_indices*max_fill;
 
-   uint64_t keys_per_round = n_indices*replacement_rate;
+   uint64_t keys_per_round = (n_indices-1)*replacement_rate+1;
 
 
    using ht_type = hash_table_type<DATA_TYPE, DATA_TYPE, tile_size, bucket_size>;
@@ -795,7 +795,7 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
 
 __host__ void execute_test(std::string table, uint64_t table_capacity, uint32_t n_rounds, double init_fill, double replacement_rate){
 
-   uint64_t replacement_items = replacement_rate*(n_rounds+1)*table_capacity;
+   uint64_t replacement_items = (replacement_rate*table_capacity+1)*(n_rounds+1);
 
    auto access_pattern = generate_data<DATA_TYPE>(table_capacity+replacement_items);
 
@@ -856,7 +856,7 @@ int main(int argc, char** argv) {
 
 
 
-   argparse::ArgumentParser program("aging_independent");
+   argparse::ArgumentParser program("Micro Aging Benchmark");
 
    // program.add_argument("square")
    // .help("display the square of a given integer")
@@ -893,10 +893,9 @@ int main(int argc, char** argv) {
 
    double replacement_rate = program.get<double>("--replacement_rate");
 
+   std::cout << "Running aging test (combined measure) with table " << table << " and " << table_capacity << " slots." << std::endl;
 
-   std::cout << "Running aging test (measure all) with table " << table << " and " << table_capacity << " slots." << std::endl;
-
-   fs::create_directory("results/sawtooth_" + std::to_string(n_rounds));
+   fs::create_directory("results/sawtooth_combined_" + std::to_string(n_rounds));
 
    execute_test(table, table_capacity, n_rounds, init_fill, replacement_rate);
 

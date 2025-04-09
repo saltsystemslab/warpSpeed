@@ -728,11 +728,14 @@ namespace tables {
             }
 
 
-            int found = __ffs(my_tile.ballot(found_ballot))-1;
+            int leader = __ffs(my_tile.ballot(found_ballot))-1;
 
-            if (found == -1) continue;
+            if (leader == -1) continue;
+
+            int found = my_tile.shfl(i, leader);
 
             return &slots[found];
+
 
 
 

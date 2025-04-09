@@ -7,6 +7,10 @@
  * ============================================================================
  */
 
+// A set of sanity benchmarks to assert that tables are performing operations correctly.
+// Tests are:
+// 1. Insert-Query-Delete: Insert, then query, then delete the same batch of keys over and over and over.
+//    - Any reasonable hash table design should be able to handle this. 
 
 
 #define COUNT_PROBES 0
@@ -425,7 +429,7 @@ __global__ void generate_adversarial_workload_warpcore(HT * table, uint32_t n_bu
 }
 
 template <typename HT>
-__global__ void round_1_adversarial_workload_warpcore(HT * table, uint32_t n_buckets, uint32_t * first_round){
+__global__ void iterative_IQD_workload_warpcore(HT * table, uint32_t n_buckets, uint32_t * first_round, uint64_t * misses){
 
    using namespace warpcore;
    auto thread_block = cg::this_thread_block();
@@ -441,11 +445,57 @@ __global__ void round_1_adversarial_workload_warpcore(HT * table, uint32_t n_buc
 
    uint32_t my_val = 0;
 
-   auto status = table->insert(my_key, my_val, my_tile);
-   
-   if (status != Status::none()){
-      printf("Key not inserted\n");
+
+
+   for (uint i = 0; i < 10000; i++){
+
+      auto insert_status = table->insert(my_key, i, my_tile);
+      
+      if (insert_status != Status::none()){
+
+         if (my_tile.thread_rank() == 0){
+            atomicAdd((unsigned long long int *)&misses[0], 1ULL);
+         }
+
+         return;
+         
+      }
+
+      if (insert_status == Status::probing_length_exceeded()){
+         printf("Probe exceeded passed external!\n");
+      }
+
+      auto query_status = table->retrieve(my_key, my_val, my_tile);
+
+      if (query_status != Status::none()){
+
+         if (my_tile.thread_rank() == 0){
+            atomicAdd((unsigned long long int *)&misses[1], 1ULL);
+         }
+
+         return;
+
+      }
+
+      if (my_val != i){
+         printf("Bad read %u != %u\n", my_val, i);
+      }
+
+      auto delete_status = table->erase(my_key, my_tile);
+
+
+      if (delete_status != Status::none()){
+
+         if (my_tile.thread_rank() == 0){
+            atomicAdd((unsigned long long int *)&misses[2], 1ULL);
+         }
+         return;
+      }
+
    }
+
+
+
 
 
 }
@@ -698,17 +748,13 @@ __host__ void test_warpcore(uint64_t n_buckets){
    cudaDeviceSynchronize();
 
 
-   round_1_adversarial_workload_warpcore<warpcore_type><<<(n_buckets*8-1)/256+1,256>>>(table, n_buckets, first_round);
-
-   round_2_adversarial_workload_warpcore<warpcore_type><<<(n_buckets*8*4-1)/256+1,256>>>(table, n_buckets, first_round, second_round, erase_set);
-
-   round_3_adversarial_workload_warpcore<warpcore_type><<<(n_buckets*8-1)/256+1,256>>>(table, n_buckets, second_round, misses);
+   iterative_IQD_workload_warpcore<warpcore_type><<<(n_buckets*8-1)/256+1,256>>>(table, n_buckets, first_round, misses);
 
    cudaDeviceSynchronize();
 
 
    bool failed = false;
-   for (int i =1; i < 5; i++){
+   for (int i =0; i < 3; i++){
       if (misses[i] != 0){
          failed = true;
       }
@@ -716,7 +762,7 @@ __host__ void test_warpcore(uint64_t n_buckets){
 
 
    if (failed){
-      printf("Table Warpcore FAILED:\n- Query after delete: %lu\n- Delete after delete: %lu\n- Failed first query: %lu\n- Failed original delete: %lu\n", misses[1], misses[2], misses[3], misses[4]);
+      printf("Table Warpcore FAILED:\n- Inserts: %lu\n- Queries: %lu\n- Deletions: %lu\n", misses[0], misses[1], misses[2]);
    } else {
       printf("Table Warpcore PASSED\n");
    }

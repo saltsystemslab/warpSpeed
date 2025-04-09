@@ -802,6 +802,8 @@ namespace tables {
                continue;
             }
 
+
+            
             //found_empty = my_tile.ballot(found_empty);
 
             return &slots[found];

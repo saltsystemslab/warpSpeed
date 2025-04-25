@@ -50,7 +50,7 @@ namespace fs = std::filesystem;
 
 #include <warpSpeed/tables/chaining.cuh>
 #include <warpSpeed/tables/p2_hashing_metadata.cuh>
-#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
+#include <warpSpeed/tables/iht_metadata.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
 #include <warpSpeed/tables/double_hashing_metadata.cuh>
 
@@ -825,7 +825,7 @@ __host__ void execute_test(std::string table, uint64_t table_capacity, uint32_t 
      
    } else if (table == "icebergMD"){
 
-      sawtooth_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+      sawtooth_test<warpSpeed::tables::iht_metadata_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
    } else if (table == "cuckoo") {
        sawtooth_test<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
@@ -975,7 +975,7 @@ int main(int argc, char** argv) {
    // sawtooth_test<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
       
    
-   // sawtooth_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<warpSpeed::tables::iht_metadata_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
    
 
    // sawtooth_test<warpSpeed::wrappers::warpcore_wrapper, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds); 

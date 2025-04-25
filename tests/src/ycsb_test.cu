@@ -48,7 +48,7 @@ namespace fs = std::filesystem;
 #include <warpSpeed/tables/chaining.cuh>
 #include <warpSpeed/tables/p2_hashing_metadata.cuh>
 
-#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
+#include <warpSpeed/tables/iht_metadata.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
 #include <warpSpeed/tables/double_hashing_metadata.cuh>
 
@@ -1269,7 +1269,7 @@ __host__ void execute_test(std::string table, std::string filename, bool cheap, 
      
    } else if (table == "icebergMD"){
 
-      lf_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(load_data, run_data, filename, cheap, cheap_insert);
+      lf_test<warpSpeed::tables::iht_metadata_generic, 4, 32>(load_data, run_data, filename, cheap, cheap_insert);
 
    }
    else if (table == "cuckoo") {
@@ -1425,7 +1425,7 @@ int main(int argc, char** argv) {
    // lf_test<warpSpeed::tables::iht_p2_generic, 8, 32>(load_data, run_data);
    
 
-   // lf_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(load_data, run_data);
+   // lf_test<warpSpeed::tables::iht_metadata_generic, 4, 32>(load_data, run_data);
 
   
 
@@ -1460,7 +1460,7 @@ int main(int argc, char** argv) {
    
    // test_all_combinations<warpSpeed::tables::iht_p2_generic>(table_capacity, access_pattern);
   
-   // test_all_combinations_md<warpSpeed::tables::iht_p2_metadata_full_generic>(table_capacity, access_pattern);
+   // test_all_combinations_md<warpSpeed::tables::iht_metadata_generic>(table_capacity, access_pattern);
 
    // init_global_allocator(15ULL*1024*1024*1024, 111);
 

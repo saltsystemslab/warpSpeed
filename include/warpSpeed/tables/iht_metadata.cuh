@@ -1,5 +1,5 @@
-#ifndef OUR_IHT_P2_METADATA_FULL
-#define OUR_IHT_P2_METADATA_FULL
+#ifndef OUR_IHT_METADATA
+#define OUR_IHT_METADATA
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
@@ -102,7 +102,7 @@ namespace tables {
 
 
    template <typename table>
-   __global__ void init_full_md_iht_p2_table_kernel(table * hash_table){
+   __global__ void init_iht_md_table_kernel(table * hash_table){
 
       uint64_t tid = gallatin::utils::get_tid();
 
@@ -112,10 +112,10 @@ namespace tables {
    }
 
    template <typename Key, Key defaultKey, Key tombstoneKey, typename Val, Val defaultVal, Val tombstoneVal, uint partition_size, uint bucket_size>
-   struct full_md_iht_p2_table {
+   struct iht_md_table {
 
 
-      using my_type = full_md_iht_p2_table<Key, defaultKey, tombstoneKey, Val, defaultVal, tombstoneVal, partition_size, bucket_size>;
+      using my_type = iht_md_table<Key, defaultKey, tombstoneKey, Val, defaultVal, tombstoneVal, partition_size, bucket_size>;
 
 
       using tile_type = cg::thread_block_tile<partition_size>;
@@ -172,7 +172,7 @@ namespace tables {
 
 
          //this is the issue
-         init_full_md_iht_p2_table_kernel<my_type><<<(n_buckets-1)/256+1,256>>>(device_version);
+         init_iht_md_table_kernel<my_type><<<(n_buckets-1)/256+1,256>>>(device_version);
 
          cudaDeviceSynchronize();
 
@@ -1742,7 +1742,7 @@ constexpr T generate_md_full_iht_p2_sentinel() {
 // template <typename Key, Key sentinel, Key tombstone, typename Val, Val defaultVal, Val tombstoneVal, uint partition_size, uint bucket_size>
   
 template <typename Key, typename Val, uint tile_size, uint bucket_size>
-using iht_p2_metadata_full_generic = typename warpSpeed::tables::full_md_iht_p2_table<Key,
+using iht_metadata_generic = typename warpSpeed::tables::iht_md_table<Key,
                                     generate_md_full_iht_p2_sentinel<Key>(),
                                     generate_md_full_iht_p2_tombstone<Key>(0),
                                     Val,

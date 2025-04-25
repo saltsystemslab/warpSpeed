@@ -178,7 +178,7 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
      
    } else if (table == "icebergMD"){
 
-      cache_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, access_pattern);
+      cache_test<warpSpeed::tables::iht_metadata_generic, 4, 32>(table_capacity, access_pattern);
 
    } else if (table == "cuckoo") {
        cache_test<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, access_pattern);

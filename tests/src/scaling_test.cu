@@ -45,7 +45,7 @@ namespace fs = std::filesystem;
 
 #include <warpSpeed/tables/double_hashing.cuh>
 #include <warpSpeed/tables/iht_p2.cuh>
-#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
+#include <warpSpeed/tables/iht_metadata.cuh>
 #include <warpSpeed/tables/chaining.cuh>
 #include <warpSpeed/tables/p2_hashing_metadata.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
@@ -485,7 +485,7 @@ __host__ void execute_test(std::string table, uint64_t table_capacity, uint32_t 
      
    } else if (table == "icebergMD"){
 
-      run_scaling<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+      run_scaling<warpSpeed::tables::iht_metadata_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
    } else if (table == "cuckoo") {
        run_scaling<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
@@ -604,7 +604,7 @@ int main(int argc, char** argv) {
 
   //  run_scaling<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
-  //  run_scaling<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<warpSpeed::tables::iht_metadata_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
 
   //  run_scaling<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);

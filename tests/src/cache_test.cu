@@ -45,7 +45,7 @@ namespace fs = std::filesystem;
 #include <warpSpeed/tables/iht_p2.cuh>
 #include <warpSpeed/tables/p2_hashing.cuh>
 
-#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
+#include <warpSpeed/tables/iht_metadata.cuh>
 #include <warpSpeed/tables/double_hashing_metadata.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
 
@@ -287,7 +287,7 @@ __host__ void execute_test(std::string table, uint64_t n_ops, uint64_t host_item
      
    } else if (table == "icebergMD"){
 
-      cache_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
+      cache_test<warpSpeed::tables::iht_metadata_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
 
    } else if (table == "chaining"){
 
@@ -404,7 +404,7 @@ int main(int argc, char** argv) {
    // cache_test<warpSpeed::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data);
    // cache_test<warpSpeed::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data);
 
-   // cache_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data);
+   // cache_test<warpSpeed::tables::iht_metadata_generic, 4, 32>(host_items, n_ops, access_data);
    
 
 

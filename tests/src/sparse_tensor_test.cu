@@ -41,7 +41,7 @@ namespace fs = std::filesystem;
 #include <warpSpeed/tables/iht_p2.cuh>
 #include <warpSpeed/tables/p2_hashing.cuh>
 
-#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
+#include <warpSpeed/tables/iht_metadata.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
 #include <warpSpeed/tables/double_hashing_metadata.cuh>
 #include <cooperative_groups.h>
@@ -104,9 +104,9 @@ __host__ void execute_test(std::string table, std::string input_file, uint64_t n
       printf("%s %f %f\n", table.c_str(), first, second);
    } else if (table == "icebergMD"){
 
-      double first = tensor_contraction_nips_2<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
+      double first = tensor_contraction_nips_2<warpSpeed::tables::iht_metadata_generic, 4, 32>(input_file, n_indices_output);
 
-      double second = tensor_contraction_nips_013<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(input_file, n_indices_output);
+      double second = tensor_contraction_nips_013<warpSpeed::tables::iht_metadata_generic, 4, 32>(input_file, n_indices_output);
  
       printf("%s %f %f\n", table.c_str(), first, second);
    } else if (table == "chaining"){

@@ -1,15 +1,17 @@
-## Concurrent GPU Hash Tables
+# warpSpeed
 
-This repository contains a set of concurrent, thread-safe hash tables for GPU operations. Each table exposes a similar API, and a set of tests are included for benchmarking the tables.
+**A High-Performance Library for Concurrent GPU Hash Tables**
+
+warpSpeed is a set of concurrent, thread-safe hash tables for GPU operations, along with the building blocks for constructing future concurrent GPU hash tables. Each implemented table exposes a similar API, and a set of tests are included for benchmarking the tables along with existing SOTA.
 
 
 # API
 --------------------
 
-- `__device__ bool upsert_replace(const tile_type & my_tile, const Key & key, const Val & val)`: atomically insert the key-value pair `key, val` into the table. If `key` has already been inserted, replace the existing value with `val`.
 - `__device__ bool upsert_function(const tile_type & my_tile, const Key & key, const Val & val, void (*replace_func)(packed_pair_type *, Key, Val))`: atomically insert the key value pair if it does not exist. If `key` has already been inserted, invokes the callback function `replace_func` on the key value pair stored in memory. A lock is held for the duration of the invocation, but `replace func` is responsible for ensuring memory coherency at the written address.
-- `__device__ bool find_with_reference(tile_type my_tile, Key key, Val & val)`: Returns true if `key` is stored in the table. If `key` is found, `val` will be filled with the current value associated with the key. If the key is not found, the function returns false and does not modify `val`.
-- `__device__ pair<Key, Val> * find_pair(tile_type my_tile, Key key)`: Returns a pointer to the unique pair with key `key` if the pair exists in the table. Else, returns nullptr. This function can only be used when the pair is stable for the lifetime of the kernel, as otherwise the key could be deleted or moved, invalidating the pointer. In a stable kernel this function can be used to apply upserts to existing keys in-place without the need to acquire locks.
+- `__device__ bool upsert_replace(const tile_type & my_tile, const Key & key, const Val & val)`: atomically insert the key-value pair `key, val` into the table. If `key` has already been inserted, replace the existing value with `val`.
+- `__device__ bool find_with_reference(tile_type my_tile, Key key, Val & val)`: Returns true if `key` is stored in the table. If `key` is found, `val` will be filled with the current value associated with the key. If the key is not found, the function returns false and does not modify `val`. This function is lockless and requires `.128.release` PTX support for loads.
+- `__device__ pair<Key, Val> * find_pair(tile_type my_tile, Key key)`: Returns a pointer to the unique pair with key `key` if the pair exists in the table. Else, returns nullptr. This function can only be used when the pair is stable for the lifetime of the kernel, as otherwise the key could be deleted or moved, invalidating the pointer. In a stable kernel this function can be used to apply upserts to existing keys in-place without the need for locks.
 - `__device__ bool remove(tile_type my_tile, Key key)`: Deletes any key-val pair associated with `key` from the table, returns true if the key was present.
 
 All functions come with a lockless variant for constructing compound operations. These operations guarantee coherency when run inside of a critical region (lock has been acquired), but do not enforce coherency without locking. The API for each lockless variant is identical to the main function but with an added `_no_lock`, so  `upsert_replace()` becomes `upsert_replace_no_lock()`. To acquire a lock, `__device__ uint64_t get_lock_bucket(tile_type my_tile, Key key)` can be used to determine the bucket associated with the key, and `__device__ void stall_lock(tile_type my_tile, uint64_t bucket)` and `__device__ void unlock(tile_type my_tile, uint64_t bucket)` are used to acquire and release the associated lock.

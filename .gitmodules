@@ -1,0 +1,6 @@
+[submodule "warpcore"]
+	path = warpcore
+	url = https://github.com/sleeepyjack/warpcore.git
+[submodule "BGHT"]
+	path = BGHT
+	url = https://github.com/owensgroup/BGHT.git

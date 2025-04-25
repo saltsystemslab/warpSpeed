@@ -21,7 +21,7 @@
 
 #include <bght/p2bht.hpp>
 
-#include <hashing_project/helpers/cache.cuh>
+#include <warpSpeed/helpers/cache.cuh>
 
 
 #include <stdio.h>
@@ -36,22 +36,22 @@
 
 namespace fs = std::filesystem;
 
-// #include <hashing_project/table_wrappers/p2_wrapper.cuh>
-// #include <hashing_project/table_wrappers/dummy_ht.cuh>
-// #include <hashing_project/table_wrappers/iht_wrapper.cuh>
+// #include <warpSpeed/table_wrappers/p2_wrapper.cuh>
+// #include <warpSpeed/table_wrappers/dummy_ht.cuh>
+// #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
 
-#include <hashing_project/tables/p2_hashing_metadata.cuh>
-#include <hashing_project/tables/p2_hashing_internal.cuh>
-#include <hashing_project/tables/chaining.cuh>
-#include <hashing_project/tables/double_hashing.cuh>
-#include <hashing_project/tables/iht_p2.cuh>
-#include <hashing_project/tables/p2_hashing_external.cuh>
-#include <hashing_project/tables/iht_p2_metadata.cuh>
-#include <hashing_project/tables/iht_p2_metadata_full.cuh>
-#include <hashing_project/tables/double_hashing_metadata.cuh>
-#include <hashing_project/tables/cuckoo.cuh>
+#include <warpSpeed/tables/p2_hashing_metadata.cuh>
+#include <warpSpeed/tables/p2_hashing_internal.cuh>
+#include <warpSpeed/tables/chaining.cuh>
+#include <warpSpeed/tables/double_hashing.cuh>
+#include <warpSpeed/tables/iht_p2.cuh>
+#include <warpSpeed/tables/p2_hashing.cuh>
+#include <warpSpeed/tables/iht_p2_metadata.cuh>
+#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
+#include <warpSpeed/tables/double_hashing_metadata.cuh>
+#include <warpSpeed/tables/cuckoo.cuh>
 
-#include <hashing_project/helpers/zipf.cuh>
+#include <warpSpeed/helpers/zipf.cuh>
 #include <cooperative_groups.h>
 
 namespace cg = cooperative_groups;
@@ -157,7 +157,7 @@ template <template<typename, typename, uint, uint> typename hash_table_type, uin
 __host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pattern, bool zipfian){
 
 
-   using cache_type = hashing_project::ht_fifo_cache<hash_table_type, tile_size, bucket_size>;
+   using cache_type = warpSpeed::ht_fifo_cache<hash_table_type, tile_size, bucket_size>;
 
    uint64_t * dev_data = gallatin::utils::get_device_version<uint64_t>(n_ops);
 
@@ -266,36 +266,36 @@ __host__ void execute_test(std::string table, uint64_t n_ops, uint64_t host_item
 
    if (table == "p2"){
 
-      cache_test<hashing_project::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data,zipfian);
+      cache_test<warpSpeed::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data,zipfian);
 
       //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
 
    } else if (table == "p2MD"){
 
-      cache_test<hashing_project::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
+      cache_test<warpSpeed::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
 
    } else if (table == "double"){
-      cache_test<hashing_project::tables::double_generic, 8, 8>(host_items, n_ops, access_data,zipfian);
+      cache_test<warpSpeed::tables::double_generic, 8, 8>(host_items, n_ops, access_data,zipfian);
 
    } else if (table == "doubleMD"){
 
-      cache_test<hashing_project::tables::md_double_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
+      cache_test<warpSpeed::tables::md_double_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
 
 
    } else if (table == "iceberg"){
 
-      cache_test<hashing_project::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data,zipfian);
+      cache_test<warpSpeed::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data,zipfian);
      
    } else if (table == "icebergMD"){
 
-      cache_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
+      cache_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data,zipfian);
 
    } else if (table == "chaining"){
 
       init_global_allocator(16ULL*1024*1024*1024, 111);
 
-      cache_test<hashing_project::tables::chaining_generic, 4, 8>(host_items, n_ops, access_data,zipfian);
+      cache_test<warpSpeed::tables::chaining_generic, 4, 8>(host_items, n_ops, access_data,zipfian);
 
       free_global_allocator();
    } else {
@@ -392,21 +392,21 @@ int main(int argc, char** argv) {
 
    
    
-   // cache_test<hashing_project::tables::chaining_generic, 4, 8>(host_items, n_ops, access_data);
+   // cache_test<warpSpeed::tables::chaining_generic, 4, 8>(host_items, n_ops, access_data);
 
    // free_global_allocator();
 
-   // cache_test<hashing_project::tables::md_double_generic, 4, 32>(host_items, n_ops, access_data);
+   // cache_test<warpSpeed::tables::md_double_generic, 4, 32>(host_items, n_ops, access_data);
   
 
 
-   // // cache_test<hashing_project::tables::p2_int_generic, 8, 32>(host_items, n_ops, access_data);
-   // //cache_test<hashing_project::tables::double_generic, 8, 8>(host_items, n_ops, access_data);
-   // // cache_test<hashing_project::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data);
-   // cache_test<hashing_project::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data);
-   // cache_test<hashing_project::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data);
+   // // cache_test<warpSpeed::tables::p2_int_generic, 8, 32>(host_items, n_ops, access_data);
+   // //cache_test<warpSpeed::tables::double_generic, 8, 8>(host_items, n_ops, access_data);
+   // // cache_test<warpSpeed::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data);
+   // cache_test<warpSpeed::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data);
+   // cache_test<warpSpeed::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data);
 
-   // cache_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data);
+   // cache_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data);
    
 
 

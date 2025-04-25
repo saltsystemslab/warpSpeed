@@ -20,7 +20,7 @@
 
 #include <bght/p2bht.hpp>
 
-#include <hashing_project/cache.cuh>
+#include <warpSpeed/cache.cuh>
 
 #include <stdio.h>
 #include <iostream>
@@ -29,10 +29,10 @@
 #include <openssl/rand.h>
 
 
-#include <hashing_project/table_wrappers/p2_wrapper.cuh>
-#include <hashing_project/table_wrappers/dummy_ht.cuh>
-#include <hashing_project/table_wrappers/iht_wrapper.cuh>
-#include <hashing_project/table_wrappers/warpcore_wrapper.cuh>
+#include <warpSpeed/table_wrappers/p2_wrapper.cuh>
+#include <warpSpeed/table_wrappers/dummy_ht.cuh>
+#include <warpSpeed/table_wrappers/iht_wrapper.cuh>
+#include <warpSpeed/table_wrappers/warpcore_wrapper.cuh>
 
 #include <iostream>
 #include <locale>
@@ -363,7 +363,7 @@ int main(int argc, char** argv) {
 
    cudaFreeHost(access_pattern);
 
-   //cache_test<hashing_project::wrappers::p2_wrapper, 32>(host_items, cache_items, n_ops);
+   //cache_test<warpSpeed::wrappers::p2_wrapper, 32>(host_items, cache_items, n_ops);
 
 
 

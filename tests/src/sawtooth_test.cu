@@ -26,7 +26,7 @@
 
 #include <bght/p2bht.hpp>
 
-#include <hashing_project/cache.cuh>
+#include <warpSpeed/cache.cuh>
 
 #include <stdio.h>
 #include <iostream>
@@ -40,21 +40,21 @@
 namespace fs = std::filesystem;
 
 
-// #include <hashing_project/table_wrappers/p2_wrapper.cuh>
-// #include <hashing_project/table_wrappers/dummy_ht.cuh>
-// #include <hashing_project/table_wrappers/iht_wrapper.cuh>
-// #include <hashing_project/table_wrappers/warpcore_wrapper.cuh>
-#include <hashing_project/tables/p2_hashing_external.cuh>
-#include <hashing_project/tables/p2_hashing_internal.cuh>
-//#include <hashing_project/tables/iht_double_hashing.cuh>
-#include <hashing_project/tables/double_hashing.cuh>
-#include <hashing_project/tables/iht_p2.cuh>
-#include <hashing_project/tables/iht_p2_metadata.cuh>
-#include <hashing_project/tables/chaining.cuh>
-#include <hashing_project/tables/p2_hashing_metadata.cuh>
-#include <hashing_project/tables/iht_p2_metadata_full.cuh>
-#include <hashing_project/tables/cuckoo.cuh>
-#include <hashing_project/tables/double_hashing_metadata.cuh>
+// #include <warpSpeed/table_wrappers/p2_wrapper.cuh>
+// #include <warpSpeed/table_wrappers/dummy_ht.cuh>
+// #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
+// #include <warpSpeed/table_wrappers/warpcore_wrapper.cuh>
+#include <warpSpeed/tables/p2_hashing.cuh>
+#include <warpSpeed/tables/p2_hashing_internal.cuh>
+//#include <warpSpeed/tables/iht_double_hashing.cuh>
+#include <warpSpeed/tables/double_hashing.cuh>
+#include <warpSpeed/tables/iht_p2.cuh>
+#include <warpSpeed/tables/iht_p2_metadata.cuh>
+#include <warpSpeed/tables/chaining.cuh>
+#include <warpSpeed/tables/p2_hashing_metadata.cuh>
+#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
+#include <warpSpeed/tables/cuckoo.cuh>
+#include <warpSpeed/tables/double_hashing_metadata.cuh>
 
 
 #include <iostream>
@@ -131,7 +131,6 @@ __host__ T * generate_clipped_data(uint64_t nitems, uint64_t cutoff){
    for (uint64_t i =0; i < nitems; i++){
       host_data[i] = host_data[i] % cutoff;
    }
-
 
    return host_data;
 
@@ -804,39 +803,39 @@ __host__ void execute_test(std::string table, uint64_t table_capacity, uint32_t 
 
    if (table == "p2"){
 
-      sawtooth_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+      sawtooth_test<warpSpeed::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
       //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
 
    } else if (table == "p2MD"){
 
-      sawtooth_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+      sawtooth_test<warpSpeed::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
    } else if (table == "double"){
-      sawtooth_test<hashing_project::tables::double_generic, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+      sawtooth_test<warpSpeed::tables::double_generic, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
    } else if (table == "doubleMD"){
 
-      sawtooth_test<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+      sawtooth_test<warpSpeed::tables::md_double_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
 
    } else if (table == "iceberg"){
 
-      sawtooth_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+      sawtooth_test<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
      
    } else if (table == "icebergMD"){
 
-      sawtooth_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+      sawtooth_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
    } else if (table == "cuckoo") {
-       sawtooth_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+       sawtooth_test<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
    
    } else if (table == "chaining"){
 
       init_global_allocator(8ULL*1024*1024*1024, 111);
 
-      sawtooth_test<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+      sawtooth_test<warpSpeed::tables::chaining_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
       free_global_allocator();
    } else {
@@ -951,28 +950,28 @@ int main(int argc, char** argv) {
    // auto negative_pattern = generate_data<DATA_TYPE>(table_capacity+replacement_items);
 
 
-   // sawtooth_test<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<warpSpeed::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   // sawtooth_test<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<warpSpeed::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   // sawtooth_test<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<warpSpeed::tables::md_double_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
-   // sawtooth_test<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
 
    // init_global_allocator(8ULL*1024*1024*1024, 111);
 
-   // sawtooth_test<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<warpSpeed::tables::chaining_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
 
    // free_global_allocator();
    
-   // sawtooth_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
       
    
-   // sawtooth_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
+   // sawtooth_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
    
 
-   // sawtooth_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds); 
+   // sawtooth_test<warpSpeed::wrappers::warpcore_wrapper, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds); 
 
    // cudaFreeHost(access_pattern);
 

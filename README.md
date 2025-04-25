@@ -18,7 +18,7 @@ All functions come with a lockless variant for constructing compound operations.
 
 # Tables
 ------------------
-Tables can be found in `include/hashing_project/tables`. The following tables are implemented:
+Tables can be found in `include/warpSpeed/tables`. The following tables are implemented:
 
 -  `Chaining`
 -  `Cuckoo`

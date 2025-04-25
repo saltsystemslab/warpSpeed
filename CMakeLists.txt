@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
-project(hashing_project VERSION 1.0 LANGUAGES CXX CUDA)
+project(warpSpeed VERSION 1.0 LANGUAGES CXX CUDA)
 
 
 
@@ -35,9 +35,9 @@ include(cmake/ConfigureExecutable.cmake)
 
 ## Package Target
 
-add_library(hashing_project INTERFACE)
+add_library(warpSpeed INTERFACE)
 
-target_include_directories(hashing_project INTERFACE
+target_include_directories(warpSpeed INTERFACE
                            "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
                            $<INSTALL_INTERFACE:include>)
 
@@ -79,20 +79,20 @@ add_subdirectory(BGHT)
 #slabhash is cursed so I think this links?
 add_subdirectory(SlabHash)
 
-# target_include_directories(hashing_project INTERFACE
+# target_include_directories(warpSpeed INTERFACE
 #                            "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
 #                            $<INSTALL_INTERFACE:include>)
 
-target_link_libraries(hashing_project INTERFACE ssl crypto)
-target_link_libraries(hashing_project INTERFACE warpcore)
-target_link_libraries(hashing_project INTERFACE gallatin)
-target_link_libraries(hashing_project INTERFACE bght)
-target_link_libraries(hashing_project INTERFACE argparse)
-# target_link_libraries(hashing_project INTERFACE slabhash)
+target_link_libraries(warpSpeed INTERFACE ssl crypto)
+target_link_libraries(warpSpeed INTERFACE warpcore)
+target_link_libraries(warpSpeed INTERFACE gallatin)
+target_link_libraries(warpSpeed INTERFACE bght)
+target_link_libraries(warpSpeed INTERFACE argparse)
+# target_link_libraries(warpSpeed INTERFACE slabhash)
 
-#target_link_libraries(hashing_project INTERFACE ssl crypto)
+#target_link_libraries(warpSpeed INTERFACE ssl crypto)
 
-target_link_libraries(hashing_project INTERFACE slabhash)
+target_link_libraries(warpSpeed INTERFACE slabhash)
 
 option(LINFO "Add lineInfo for NSight Compute profiling" OFF)
 
@@ -120,8 +120,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -rdc=true -lcudadevrt -lcudart")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set_target_properties(hashing_project PROPERTIES CMAKE_CUDA_RUNTIME_LIBRARY Static)
-set_target_properties(hashing_project PROPERTIES CUDA_SEPARABLE_COMPILATION ON )
+set_target_properties(warpSpeed PROPERTIES CMAKE_CUDA_RUNTIME_LIBRARY Static)
+set_target_properties(warpSpeed PROPERTIES CUDA_SEPARABLE_COMPILATION ON )
 
 
 

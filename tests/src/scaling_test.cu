@@ -25,7 +25,7 @@
 
 #include <bght/p2bht.hpp>
 
-#include <hashing_project/cache.cuh>
+#include <warpSpeed/cache.cuh>
 
 #include <stdio.h>
 #include <iostream>
@@ -39,19 +39,19 @@
 namespace fs = std::filesystem;
 
 
-// #include <hashing_project/table_wrappers/p2_wrapper.cuh>
-// #include <hashing_project/table_wrappers/dummy_ht.cuh>
-// #include <hashing_project/table_wrappers/iht_wrapper.cuh>
-// #include <hashing_project/table_wrappers/warpcore_wrapper.cuh>
-#include <hashing_project/tables/p2_hashing_external.cuh>
-#include <hashing_project/tables/p2_hashing_internal.cuh>
-#include <hashing_project/tables/double_hashing.cuh>
-#include <hashing_project/tables/iht_p2.cuh>
-#include <hashing_project/tables/iht_p2_metadata_full.cuh>
-#include <hashing_project/tables/chaining.cuh>
-#include <hashing_project/tables/p2_hashing_metadata.cuh>
-#include <hashing_project/tables/cuckoo.cuh>
-#include <hashing_project/tables/double_hashing_metadata.cuh>
+// #include <warpSpeed/table_wrappers/p2_wrapper.cuh>
+// #include <warpSpeed/table_wrappers/dummy_ht.cuh>
+// #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
+// #include <warpSpeed/table_wrappers/warpcore_wrapper.cuh>
+#include <warpSpeed/tables/p2_hashing.cuh>
+#include <warpSpeed/tables/p2_hashing_internal.cuh>
+#include <warpSpeed/tables/double_hashing.cuh>
+#include <warpSpeed/tables/iht_p2.cuh>
+#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
+#include <warpSpeed/tables/chaining.cuh>
+#include <warpSpeed/tables/p2_hashing_metadata.cuh>
+#include <warpSpeed/tables/cuckoo.cuh>
+#include <warpSpeed/tables/double_hashing_metadata.cuh>
 
 #include <iostream>
 #include <locale>
@@ -464,39 +464,39 @@ __host__ void execute_test(std::string table, uint64_t table_capacity, uint32_t 
 
    if (table == "p2"){
 
-      run_scaling<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+      run_scaling<warpSpeed::tables::p2_ext_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
       //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
 
    } else if (table == "p2MD"){
 
-      run_scaling<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+      run_scaling<warpSpeed::tables::md_p2_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
    } else if (table == "double"){
-      run_scaling<hashing_project::tables::double_generic, 8, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+      run_scaling<warpSpeed::tables::double_generic, 8, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
    } else if (table == "doubleMD"){
 
-      run_scaling<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+      run_scaling<warpSpeed::tables::md_double_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
 
    } else if (table == "iceberg"){
 
-      run_scaling<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+      run_scaling<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
      
    } else if (table == "icebergMD"){
 
-      run_scaling<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+      run_scaling<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
    } else if (table == "cuckoo") {
-       run_scaling<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+       run_scaling<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
    
    } else if (table == "chaining"){
 
       init_global_allocator(30ULL*1024*1024*1024, 111);
 
-      run_scaling<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+      run_scaling<warpSpeed::tables::chaining_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
       free_global_allocator();
    } else {
@@ -599,36 +599,36 @@ int main(int argc, char** argv) {
 
   //  auto access_pattern = generate_data<DATA_TYPE>(max_items);
    
-  //  run_scaling<hashing_project::tables::md_p2_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<warpSpeed::tables::md_p2_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
-  //  run_scaling<hashing_project::tables::p2_ext_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
-  //  run_scaling<hashing_project::tables::double_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<warpSpeed::tables::p2_ext_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<warpSpeed::tables::double_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
-  //  run_scaling<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
-  //  run_scaling<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
-
-
-  //  run_scaling<hashing_project::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
 
-  //  run_scaling<hashing_project::tables::md_double_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+
+
+  //  run_scaling<warpSpeed::tables::md_double_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
    
   //  init_global_allocator(30ULL*1024*1024*1024, 111);
 
-  //  run_scaling<hashing_project::tables::chaining_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
+  //  run_scaling<warpSpeed::tables::chaining_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
 
   //  free_global_allocator();
 
   //  cudaDeviceSynchronize();
    
 
-  // // lf_test<hashing_project::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
+  // // lf_test<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
    
   
 
-  //  //lf_test<hashing_project::wrappers::warpcore_wrapper, 8, 8>(table_capacity, access_pattern);
+  //  //lf_test<warpSpeed::wrappers::warpcore_wrapper, 8, 8>(table_capacity, access_pattern);
 
 
   //  cudaFreeHost(access_pattern);

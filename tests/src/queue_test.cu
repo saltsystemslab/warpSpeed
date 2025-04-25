@@ -20,7 +20,7 @@
 
 #include <bght/p2bht.hpp>
 
-#include <hashing_project/helpers/cache.cuh>
+#include <warpSpeed/helpers/cache.cuh>
 
 #include <stdio.h>
 #include <iostream>
@@ -34,18 +34,18 @@
 
 namespace fs = std::filesystem;
 
-// #include <hashing_project/table_wrappers/p2_wrapper.cuh>
-// #include <hashing_project/table_wrappers/dummy_ht.cuh>
-// #include <hashing_project/table_wrappers/iht_wrapper.cuh>
+// #include <warpSpeed/table_wrappers/p2_wrapper.cuh>
+// #include <warpSpeed/table_wrappers/dummy_ht.cuh>
+// #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
 
-#include <hashing_project/tables/p2_hashing_metadata.cuh>
-#include <hashing_project/tables/p2_hashing_internal.cuh>
-#include <hashing_project/tables/chaining.cuh>
-#include <hashing_project/tables/double_hashing.cuh>
-#include <hashing_project/tables/iht_p2.cuh>
-#include <hashing_project/tables/p2_hashing_external.cuh>
-#include <hashing_project/tables/iht_p2_metadata.cuh>
-#include <hashing_project/tables/iht_p2_metadata_full.cuh>
+#include <warpSpeed/tables/p2_hashing_metadata.cuh>
+#include <warpSpeed/tables/p2_hashing_internal.cuh>
+#include <warpSpeed/tables/chaining.cuh>
+#include <warpSpeed/tables/double_hashing.cuh>
+#include <warpSpeed/tables/iht_p2.cuh>
+#include <warpSpeed/tables/p2_hashing.cuh>
+#include <warpSpeed/tables/iht_p2_metadata.cuh>
+#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
 #include <cooperative_groups.h>
 
 namespace cg = cooperative_groups;
@@ -150,7 +150,7 @@ template <template<typename, typename, uint, uint> typename hash_table_type, uin
 __host__ void cache_test(uint64_t host_items, uint64_t n_ops, uint64_t * data_pattern){
 
 
-   using queue_type = hashing_project::helpers::fifo_queue<uint64_t, ~0ULL>;
+   using queue_type = warpSpeed::helpers::fifo_queue<uint64_t, ~0ULL>;
 
    using ht_type = hash_table_type<uint64_t, uint64_t, tile_size, bucket_size>;
 
@@ -253,18 +253,18 @@ int main(int argc, char** argv) {
 
    
    
-   // cache_test<hashing_project::tables::chaining_generic, 4, 8>(host_items, n_ops, access_data);
+   // cache_test<warpSpeed::tables::chaining_generic, 4, 8>(host_items, n_ops, access_data);
 
    // free_global_allocator();
 
 
-   // cache_test<hashing_project::tables::p2_int_generic, 8, 32>(host_items, n_ops, access_data);
-   cache_test<hashing_project::tables::double_generic, 4, 8>(host_items, n_ops, access_data);
-   cache_test<hashing_project::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data);
-   cache_test<hashing_project::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data);
-   cache_test<hashing_project::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data);
+   // cache_test<warpSpeed::tables::p2_int_generic, 8, 32>(host_items, n_ops, access_data);
+   cache_test<warpSpeed::tables::double_generic, 4, 8>(host_items, n_ops, access_data);
+   cache_test<warpSpeed::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data);
+   cache_test<warpSpeed::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data);
+   cache_test<warpSpeed::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data);
 
-   cache_test<hashing_project::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data);
+   cache_test<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(host_items, n_ops, access_data);
    
 
 

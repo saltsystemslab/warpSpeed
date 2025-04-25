@@ -4,3 +4,6 @@
 [submodule "BGHT"]
 	path = BGHT
 	url = https://github.com/owensgroup/BGHT.git
+[submodule "SlabHash"]
+	path = SlabHash
+	url = https://github.com/owensgroup/SlabHash.git

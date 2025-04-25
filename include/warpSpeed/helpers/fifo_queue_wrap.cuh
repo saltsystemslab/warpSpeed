@@ -186,7 +186,7 @@ namespace helpers {
 
         while (atomicOr((unsigned long long int *)&locks[high], (unsigned long long int) SET_BIT_MASK(low)) & SET_BIT_MASK(low)){
 
-          //printf("Stalling on %llu\n", loc);
+          //printf("Stalling on %lu\n", loc);
 
         }
 

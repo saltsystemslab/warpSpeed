@@ -26,7 +26,7 @@
 #include <bght/bcht.hpp>
 #include <bght/iht.hpp>
 
-#include <warpSpeed/cache.cuh>
+
 
 #include <stdio.h>
 #include <iostream>
@@ -40,17 +40,15 @@
 namespace fs = std::filesystem;
 
 
-// #include <warpSpeed/table_wrappers/p2_wrapper.cuh>
-// #include <warpSpeed/table_wrappers/dummy_ht.cuh>
-// #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
-#include <warpSpeed/table_wrappers/warpcore_wrapper.cuh>
+
+
 #include <warpSpeed/tables/p2_hashing.cuh>
-#include <warpSpeed/tables/p2_hashing_internal.cuh>
+
 #include <warpSpeed/tables/double_hashing.cuh>
 #include <warpSpeed/tables/iht_p2.cuh>
 #include <warpSpeed/tables/chaining.cuh>
 #include <warpSpeed/tables/p2_hashing_metadata.cuh>
-#include <warpSpeed/tables/iht_p2_metadata.cuh>
+
 #include <warpSpeed/tables/iht_p2_metadata_full.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
 #include <warpSpeed/tables/double_hashing_metadata.cuh>
@@ -112,7 +110,7 @@ __host__ T * generate_data(uint64_t nitems){
 
       to_fill += togen;
 
-      //printf("Generated %llu/%llu\n", to_fill, nitems);
+      //printf("Generated %lu/%lu\n", to_fill, nitems);
 
    }
 
@@ -715,7 +713,7 @@ __host__ void print_duplicates(data * data_array, uint64_t n_pairs){
 
    cudaDeviceSynchronize();
 
-   //printf("System has %llu duplicates\n", misses[0]);
+   //printf("System has %lu duplicates\n", misses[0]);
 
    cudaFree(misses);
    cudaFree(device_data);

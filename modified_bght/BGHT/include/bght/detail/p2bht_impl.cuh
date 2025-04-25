@@ -1772,7 +1772,7 @@ __device__ void bght::p2bht<Key, T, Hash, KeyEqual, Scope, Allocator, B>::stall_
 
     //if old is 0, SET_BIT_MASK & 0 is 0 - loop exit.
     while (atomicOr((unsigned long long int *)&locks[high], (unsigned long long int) SET_BIT_MASK(low)) & SET_BIT_MASK(low)){
-      //printf("TID %llu Stalling for Bucket %llu/%llu\n", threadIdx.x+blockIdx.x*blockDim.x, bucket, num_buckets_);
+      //printf("TID %lu Stalling for Bucket %lu/%lu\n", threadIdx.x+blockIdx.x*blockDim.x, bucket, num_buckets_);
     }
 
   }

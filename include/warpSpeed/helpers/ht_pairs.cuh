@@ -3,6 +3,7 @@
 
 
 #include <gallatin/allocators/alloc_utils.cuh>
+#include <gallatin/data_structs/ds_utils.cuh>
 
 namespace warpSpeed {
 

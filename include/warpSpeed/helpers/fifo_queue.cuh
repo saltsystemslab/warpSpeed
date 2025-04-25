@@ -123,7 +123,7 @@ namespace helpers {
 
         //needs to loop.
         while(typed_atomic_CAS(&buffer[enqueue_slot], default_value, new_item) != default_value){
-          printf("Failed to swap index %llu in for thread %llu\n", enqueue_slot, gallatin::utils::get_tid());
+          printf("Failed to swap index %lu in for thread %lu\n", enqueue_slot, gallatin::utils::get_tid());
         }
         //  //throw error
         //  asm volatile("trap;"); 

@@ -1629,7 +1629,7 @@ namespace tables {
 
          cudaFreeHost(host_version);
 
-         printf("chaining_hashing using %llu bytes\n", capacity);
+         printf("chaining_hashing using %lu bytes\n", capacity);
 
       }
 

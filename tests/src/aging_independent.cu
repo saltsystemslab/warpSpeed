@@ -26,7 +26,7 @@
 
 #include <bght/p2bht.hpp>
 
-#include <warpSpeed/cache.cuh>
+
 
 #include <stdio.h>
 #include <iostream>
@@ -40,16 +40,14 @@
 namespace fs = std::filesystem;
 
 
-// #include <warpSpeed/table_wrappers/p2_wrapper.cuh>
-// #include <warpSpeed/table_wrappers/dummy_ht.cuh>
-// #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
-// #include <warpSpeed/table_wrappers/warpcore_wrapper.cuh>
+
+// 
 #include <warpSpeed/tables/p2_hashing.cuh>
-#include <warpSpeed/tables/p2_hashing_internal.cuh>
+
 //#include <warpSpeed/tables/iht_double_hashing.cuh>
 #include <warpSpeed/tables/double_hashing.cuh>
 #include <warpSpeed/tables/iht_p2.cuh>
-#include <warpSpeed/tables/iht_p2_metadata.cuh>
+
 #include <warpSpeed/tables/chaining.cuh>
 #include <warpSpeed/tables/p2_hashing_metadata.cuh>
 #include <warpSpeed/tables/iht_p2_metadata_full.cuh>
@@ -110,7 +108,7 @@ __host__ T * generate_data(uint64_t nitems){
 
       to_fill += togen;
 
-      //printf("Generated %llu/%llu\n", to_fill, nitems);
+      //printf("Generated %lu/%lu\n", to_fill, nitems);
 
    }
 
@@ -768,7 +766,7 @@ __host__ void sawtooth_test(uint64_t n_indices, double max_fill, double replacem
    #else
 
    std::cout.imbue(std::locale(""));
-   printf("Done with %llu rounds in %f seconds, throughput %f\n", n_loops, total_time, 1.0*n_loops*4*keys_per_round/total_time);
+   printf("Done with %lu rounds in %f seconds, throughput %f\n", n_loops, total_time, 1.0*n_loops*4*keys_per_round/total_time);
 
 
    //write output

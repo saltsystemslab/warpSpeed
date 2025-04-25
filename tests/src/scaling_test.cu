@@ -25,7 +25,7 @@
 
 #include <bght/p2bht.hpp>
 
-#include <warpSpeed/cache.cuh>
+
 
 #include <stdio.h>
 #include <iostream>
@@ -39,12 +39,10 @@
 namespace fs = std::filesystem;
 
 
-// #include <warpSpeed/table_wrappers/p2_wrapper.cuh>
-// #include <warpSpeed/table_wrappers/dummy_ht.cuh>
-// #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
-// #include <warpSpeed/table_wrappers/warpcore_wrapper.cuh>
+
+// 
 #include <warpSpeed/tables/p2_hashing.cuh>
-#include <warpSpeed/tables/p2_hashing_internal.cuh>
+
 #include <warpSpeed/tables/double_hashing.cuh>
 #include <warpSpeed/tables/iht_p2.cuh>
 #include <warpSpeed/tables/iht_p2_metadata_full.cuh>
@@ -105,7 +103,7 @@ __host__ T * generate_data(uint64_t nitems){
 
       to_fill += togen;
 
-      //printf("Generated %llu/%llu\n", to_fill, nitems);
+      //printf("Generated %lu/%lu\n", to_fill, nitems);
 
    }
 
@@ -362,7 +360,7 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern, std::ofstr
 
       #if COUNT_PROBES
 
-      printf("Probes %llu %llu %llu\n", insert_probes, query_probes, remove_probes);
+      printf("Probes %lu %lu %lu\n", insert_probes, query_probes, remove_probes);
     
       myfile << n_indices << "," << std::setprecision(12) << 1.0*insert_probes/items_to_insert << "," << 1.0*query_probes/items_to_insert << "," << 1.0*remove_probes/items_to_insert << "\n";
 

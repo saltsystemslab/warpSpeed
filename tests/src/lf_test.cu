@@ -26,7 +26,7 @@
 #include <bght/bcht.hpp>
 #include <bght/iht.hpp>
 
-#include <warpSpeed/cache.cuh>
+
 
 #include <stdio.h>
 #include <iostream>
@@ -40,18 +40,15 @@
 namespace fs = std::filesystem;
 
 
-// #include <warpSpeed/table_wrappers/p2_wrapper.cuh>
-// #include <warpSpeed/table_wrappers/dummy_ht.cuh>
-// #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
-#include <warpSpeed/table_wrappers/warpcore_wrapper.cuh>
+
+
 #include <warpSpeed/tables/p2_hashing.cuh>
-#include <warpSpeed/tables/p2_hashing_inverted.cuh>
-#include <warpSpeed/tables/p2_hashing_internal.cuh>
+
 #include <warpSpeed/tables/double_hashing.cuh>
 #include <warpSpeed/tables/iht_p2.cuh>
 #include <warpSpeed/tables/chaining.cuh>
 #include <warpSpeed/tables/p2_hashing_metadata.cuh>
-#include <warpSpeed/tables/iht_p2_metadata.cuh>
+
 #include <warpSpeed/tables/iht_p2_metadata_full.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
 #include <warpSpeed/tables/double_hashing_metadata.cuh>
@@ -113,7 +110,7 @@ __host__ T * generate_data(uint64_t nitems){
 
       to_fill += togen;
 
-      //printf("Generated %llu/%llu\n", to_fill, nitems);
+      //printf("Generated %lu/%lu\n", to_fill, nitems);
 
    }
 
@@ -424,7 +421,7 @@ __host__ void lf_test(uint64_t n_indices, DATA_TYPE * access_pattern){
 
       #if COUNT_PROBES
 
-      //printf("Probes %llu %llu %llu\n", insert_probes, query_probes, remove_probes);
+      //printf("Probes %lu %lu %lu\n", insert_probes, query_probes, remove_probes);
     
       myfile << lf << "," << std::setprecision(12) << 1.0*insert_probes/items_to_insert << "," << 1.0*query_probes/items_to_insert << "," << 1.0*remove_probes/items_to_insert << "\n";
 
@@ -605,7 +602,7 @@ __host__ void lf_test_combo_cuckoo(uint64_t n_indices, DATA_TYPE * access_patter
 
       #if COUNT_PROBES
 
-      //printf("Probes %llu %llu %llu\n", insert_probes, query_probes, remove_probes);
+      //printf("Probes %lu %lu %lu\n", insert_probes, query_probes, remove_probes);
     
       myfile << lf << "," << std::setprecision(12) << 1.0*insert_probes/items_to_insert << "," << 1.0*query_probes/items_to_insert << "," << 1.0*remove_probes/items_to_insert << "\n";
 
@@ -765,7 +762,7 @@ __host__ void print_duplicates(data * data_array, uint64_t n_pairs){
 
    cudaDeviceSynchronize();
 
-   //printf("System has %llu duplicates\n", misses[0]);
+   //printf("System has %lu duplicates\n", misses[0]);
 
    cudaFree(misses);
    cudaFree(device_data);
@@ -975,10 +972,6 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
       //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
 
-   } else if (table == "p2inv"){
-
-      lf_test<warpSpeed::tables::p2_inv_generic, 8, 32>(table_capacity, access_pattern);
-
    } else if (table == "p2MD"){
 
       lf_test<warpSpeed::tables::md_p2_generic, 4, 32>(table_capacity, access_pattern);
@@ -1031,7 +1024,7 @@ int main(int argc, char** argv) {
 
    program.add_argument("--table", "-t")
    .required()
-   .help("Specify table type. Options [p2 p2MD p2inv double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
+   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
 
    program.add_argument("--capacity", "-c").required().scan<'u', uint64_t>().help("Number of slots in the table. Default is 100,000,000");
 

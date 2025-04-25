@@ -28,7 +28,7 @@
 
 #include <bght/p2bht.hpp>
 
-#include <warpSpeed/cache.cuh>
+
 
 #include <stdio.h>
 #include <iostream>
@@ -42,12 +42,12 @@
 namespace fs = std::filesystem;
 
 
-//#include <warpSpeed/table_wrappers/p2_wrapper.cuh>
+//
 //#include <warpSpeed/table_wrappers/dummy_ht.cuh>
 //#include <warpSpeed/table_wrappers/iht_wrapper.cuh>
-#include <warpSpeed/table_wrappers/warpcore_wrapper.cuh>
+
 #include <warpSpeed/tables/p2_hashing.cuh>
-#include <warpSpeed/tables/p2_hashing_internal.cuh>
+
 #include <warpSpeed/tables/double_hashing.cuh>
 #include <warpSpeed/tables/iht_p2.cuh>
 #include <warpSpeed/tables/chaining.cuh>
@@ -109,7 +109,7 @@ __host__ T * generate_data(uint64_t nitems){
 
       to_fill += togen;
 
-      //printf("Generated %llu/%llu\n", to_fill, nitems);
+      //printf("Generated %lu/%lu\n", to_fill, nitems);
 
    }
 
@@ -172,11 +172,11 @@ __global__ void verify_setup(uint32_t num_keys, uint32_t * first_round, uint32_t
 
    if (tid >= num_keys) return;
 
-   if (first_round[tid] == 0) printf("Fail on first for bucket %llu\n", tid);
+   if (first_round[tid] == 0) printf("Fail on first for bucket %lu\n", tid);
 
-   if (second_round[tid] == 0) printf("Fail on second for bucket %llu\n", tid);
+   if (second_round[tid] == 0) printf("Fail on second for bucket %lu\n", tid);
 
-   if (first_round[tid] == second_round[tid]) printf("Duplicates in %llu\n", tid);
+   if (first_round[tid] == second_round[tid]) printf("Duplicates in %lu\n", tid);
 
 }
 
@@ -337,7 +337,7 @@ __global__ void round_3_adversarial_workload(HT table, uint32_t n_buckets, uint3
    if (my_tile.thread_rank() == 0 && my_val != SEARCH_NOT_FOUND){
 
       atomicAdd((unsigned long long int *)&misses[1], 1ULL);
-      //printf("Key still exists, bucket %llu prev val %u query value: %u\n", tid, prev_val, my_val);
+      //printf("Key still exists, bucket %lu prev val %u query value: %u\n", tid, prev_val, my_val);
    }
 
 
@@ -626,7 +626,7 @@ __global__ void round_3_adversarial_workload_warpcore(HT * table, uint32_t n_buc
    if (my_tile.thread_rank() == 0 && second_query != Status::key_not_found()){
 
       atomicAdd((unsigned long long int *)&misses[1], 1ULL);
-      //printf("Key still exists, bucket %llu prev val %u query value: %u\n", tid, prev_val, my_val);
+      //printf("Key still exists, bucket %lu prev val %u query value: %u\n", tid, prev_val, my_val);
    }
 
 

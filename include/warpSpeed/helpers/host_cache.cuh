@@ -118,7 +118,7 @@ namespace warpSpeed {
 
          my_type * host_version = gallatin::utils::copy_to_host<my_type>(this);
 
-         printf("Cache using %llu\n", host_version->host_capacity*(16));
+         printf("Cache using %lu\n", host_version->host_capacity*(16));
             
          //uint64_t capacity = host_version->n_buckets*(sizeof(bucket_type)+sizeof(md_bucket_type)) + (host_version->n_buckets-1)/8+1; 
 
@@ -313,7 +313,7 @@ namespace warpSpeed {
       //     //failure - should never fail to find or delete a key that made it into the system.
 
       //     if (my_tile.thread_rank() == 0){
-      //       printf("Failure to query %llu\n", index);
+      //       printf("Failure to query %lu\n", index);
       //     }
 
       //     map->unlock_key(my_tile, index);
@@ -325,7 +325,7 @@ namespace warpSpeed {
       //   if (!map->remove_no_lock(my_tile, index)){
           
       //     if (my_tile.thread_rank() == 0){
-      //       printf("Failure to remove %llu\n", index);
+      //       printf("Failure to remove %lu\n", index);
       //     }
 
       //     map->unlock_key(my_tile, index);

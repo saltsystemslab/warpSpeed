@@ -28,18 +28,16 @@
 #include <openssl/rand.h>
 
 
-// #include <warpSpeed/table_wrappers/p2_wrapper.cuh>
-// #include <warpSpeed/table_wrappers/dummy_ht.cuh>
-// #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
+
 
 #include <warpSpeed/tables/p2_hashing_metadata.cuh>
-#include <warpSpeed/tables/p2_hashing_internal.cuh>
+
 #include <warpSpeed/tables/chaining.cuh>
 #include <warpSpeed/tables/double_hashing.cuh>
 #include <warpSpeed/tables/iht_p2.cuh>
 #include <warpSpeed/tables/p2_hashing.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
-#include <warpSpeed/tables/iht_p2_metadata.cuh>
+
 
 #include <cooperative_groups.h>
 
@@ -80,7 +78,7 @@ __host__ T * generate_data(uint64_t nitems){
 
       to_fill += togen;
 
-      //printf("Generated %llu/%llu\n", to_fill, nitems);
+      //printf("Generated %lu/%lu\n", to_fill, nitems);
 
    }
 

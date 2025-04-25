@@ -422,7 +422,7 @@ __global__ void convert_to_ht(ht_type * indirection_table, coo_matrix<n_dims> * 
    }
 
    // if (my_tile.thread_rank() == 0){
-   // 	printf("Done with %llu\n", tid);
+   // 	printf("Done with %lu\n", tid);
    // }
 
 }
@@ -539,7 +539,7 @@ __global__ void convert_to_ht_individual(ht_type * indirection_table, coo_matrix
    }
 
    // if (my_tile.thread_rank() == 0){
-   // 	printf("Done with %llu\n", tid);
+   // 	printf("Done with %lu\n", tid);
    // }
 
 }

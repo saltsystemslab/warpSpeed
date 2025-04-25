@@ -20,7 +20,7 @@
 
 #include <bght/p2bht.hpp>
 
-#include <warpSpeed/cache.cuh>
+
 
 #include <stdio.h>
 #include <iostream>
@@ -29,7 +29,7 @@
 #include <openssl/rand.h>
 
 
-#include <warpSpeed/table_wrappers/p2_wrapper.cuh>
+
 #include <warpSpeed/table_wrappers/dummy_ht.cuh>
 #include <warpSpeed/table_wrappers/iht_wrapper.cuh>
 
@@ -72,7 +72,7 @@ __host__ T * generate_data(uint64_t nitems){
 
       to_fill += togen;
 
-      //printf("Generated %llu/%llu\n", to_fill, nitems);
+      //printf("Generated %lu/%lu\n", to_fill, nitems);
 
    }
 

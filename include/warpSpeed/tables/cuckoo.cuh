@@ -932,13 +932,13 @@ template <typename HT, uint tile_size>
          do {
             ADD_PROBE
             #if DEBUG_PRINTS
-            printf("Looping on lock %llu\n", bucket);
+            printf("Looping on lock %lu\n", bucket);
             #endif
          }
          while (atomicOr((unsigned long long int *)&primary_locks[high], (unsigned long long int) SET_BIT_MASK(low)) & SET_BIT_MASK(low));
 
          #if DEBUG_PRINTS
-         printf("Lock %llu acquired\n", bucket);
+         printf("Lock %lu acquired\n", bucket);
          #endif
 
 
@@ -1205,7 +1205,7 @@ template <typename HT, uint tile_size>
 
          //this doesn't trigger?
          // if (!next_bucket_ptr->query(my_tile, key, alt_queried_val)){
-         //    printf("Failed to cuckoo and query key %llu\n", key); 
+         //    printf("Failed to cuckoo and query key %lu\n", key); 
          // }
 
          //at this point the key is moved and the chain can proceed.
@@ -1969,7 +1969,7 @@ template <typename HT, uint tile_size>
             //hash = get_current_bucket(working_key, 0);
 
             // if (current_bucket_id == -1 && my_tile.thread_rank() == 0){
-            //    printf("Failed movement for key %llu\n", working_key);
+            //    printf("Failed movement for key %lu\n", working_key);
 
             //    return false;
             // }
@@ -2484,7 +2484,7 @@ template <typename HT, uint tile_size>
 
          cudaFreeHost(host_version);
 
-         printf("Cuckoo using %llu bytes\n", capacity);
+         printf("Cuckoo using %lu bytes\n", capacity);
 
       }
 

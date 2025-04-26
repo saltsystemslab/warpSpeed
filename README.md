@@ -32,7 +32,7 @@ Tables can be found in `include/warpSpeed/tables`. The following tables are impl
 -  `Power-of-two-choice Hashing (Metadata)`
 
 
-#Benchmarks
+# Benchmarks
 ------------------
 
 Each benchmark tests one component of hash table paper. The tests are all executed with the same argument system, and `-h` or `--help` can be passed to see the exact parameters of each benchmark.

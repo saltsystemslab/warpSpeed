@@ -33,6 +33,12 @@ include(cmake/CPM.cmake)
 #macro for configuring executable
 include(cmake/ConfigureExecutable.cmake)
 
+
+#disable BGHT testing
+set(build_benchmarks OFF CACHE BOOL "Disable benchmarks" FORCE)
+set(build_tests OFF CACHE BOOL "Disable tests" FORCE)
+set(build_examples OFF CACHE BOOL "Disable examples" FORCE)
+
 ## Package Target
 
 add_library(warpSpeed INTERFACE)
@@ -88,7 +94,7 @@ target_link_libraries(warpSpeed INTERFACE warpcore)
 target_link_libraries(warpSpeed INTERFACE gallatin)
 target_link_libraries(warpSpeed INTERFACE bght)
 target_link_libraries(warpSpeed INTERFACE argparse)
-# target_link_libraries(warpSpeed INTERFACE slabhash)
+target_link_libraries(warpSpeed INTERFACE slabhash)
 
 #target_link_libraries(warpSpeed INTERFACE ssl crypto)
 
@@ -122,8 +128,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set_target_properties(warpSpeed PROPERTIES CMAKE_CUDA_RUNTIME_LIBRARY Static)
 set_target_properties(warpSpeed PROPERTIES CUDA_SEPARABLE_COMPILATION ON )
-
-
 
 
 add_subdirectory(tests)

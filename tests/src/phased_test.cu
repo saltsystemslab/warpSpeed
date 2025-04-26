@@ -53,7 +53,7 @@ namespace fs = std::filesystem;
 #include <warpSpeed/tables/cuckoo.cuh>
 #include <warpSpeed/tables/double_hashing_metadata.cuh>
 
-#include <slabhash/gpu_hash_table.cuh>
+#include <gpu_hash_table.cuh>
 
 #include <iostream>
 #include <locale>

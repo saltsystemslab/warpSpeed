@@ -2,7 +2,7 @@
 
 cd dataset
 
-unzip nips.tns.zip
+gunzip nips.tns.gz
 
 cd ..
 

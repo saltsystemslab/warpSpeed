@@ -523,7 +523,7 @@ __global__ void remove_kernel_slabhash(ht_type table, DATA_TYPE * insert_buffer,
 
 
    DATA_TYPE my_key = insert_buffer[tid];
-   DATA_TYPE my_val = insert_buffer[tid];
+   //DATA_TYPE my_val = insert_buffer[tid];
 
    bool to_be_inserted = (my_tile.thread_rank() == 0);
 

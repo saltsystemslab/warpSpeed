@@ -95,7 +95,7 @@ uint64_t zipf(double alpha, uint64_t n, bool reset=false)
   static double c = 0;          // Normalization constant
   static double *sum_probs;     // Pre-calculated sum of probabilities
   double z;                     // Uniform random number (0 < z < 1)
-  uint64_t zipf_value;               // Computed exponential value to be returned
+  uint64_t zipf_value = 0;               // Computed exponential value to be returned
   uint64_t   i;                     // Loop counter
   uint64_t low, high, mid;           // Binary-search bounds
 

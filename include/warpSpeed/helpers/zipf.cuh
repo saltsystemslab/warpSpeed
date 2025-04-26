@@ -215,8 +215,6 @@ __host__ uint64_t * generate_zipfian_values(uint64_t items_to_generate, uint64_t
 
       uint64_t zipfian_input = max_range;
 
-      double barwidth=50;
-
 
       printf("Starting zipfian gen with alpha %f\n", alpha);
 

@@ -1622,16 +1622,6 @@ namespace warpSpeed {
 
             bool valid_to_load = i < (bucket_size-1/8)+1;
 
-            
-            //maybe change these
-            #if LARGE_BUCKET_MODS
-            //uint64_t local_empty = 0U;
-            uint64_t local_match = 0U;
-            #else
-            //uint32_t local_empty = 0U;
-            uint32_t local_match = 0U;
-            #endif
-
 
 
             if (valid_to_load){

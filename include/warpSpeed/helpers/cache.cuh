@@ -367,8 +367,6 @@ namespace warpSpeed {
         uint64_t index_bucket = map->get_lock_bucket(my_tile, index);
          
 
-        int n_iters = 0;
-
         //if (my_tile.thread_rank() == 0) printf("Looping\n");
 
 
@@ -394,8 +392,6 @@ namespace warpSpeed {
 
 
         uint64_t replace_index;
-
-        uint64_t queue_loc;
 
         START_QUEUE_READ_THROUGHPUT
 

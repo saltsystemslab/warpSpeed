@@ -49,7 +49,6 @@ void end_bar(uint64_t items_to_generate){
 
   const int barwidth = 50;
   std::cout << "[";
-  int progress = barwidth;
 
   for (int j = 0; j < barwidth; j++){
        std::cout << "=";

@@ -257,7 +257,6 @@ __global__ void round_2_adversarial_workload(HT table, uint32_t n_buckets, uint3
 
    if (key_select == 0){
       uint32_t my_key = first_round[tid];
-      uint32_t my_val = 0;
 
       uint32_t myBucket = table.computeBucket(my_key);
 
@@ -555,7 +554,6 @@ __global__ void round_2_adversarial_workload_generic(HT * table, uint32_t n_buck
 
    if (key_select == 0){
       uint32_t my_key = first_round[tid];
-      uint32_t my_val = 0;
 
       table->remove(my_tile, my_key);
 
@@ -645,9 +643,7 @@ __host__ void test_table(uint64_t n_buckets){
 
    //uint64_t generated_keys = num_keys*8;
 
-   uint64_t seed = 461; 
-
-   ht_type * table = ht_type::generate_on_device(num_keys, 42);
+   ht_type * table = ht_type::generate_on_device(num_keys, 4212341ULL);
 
    n_buckets = table->get_num_locks();
 

@@ -1,5 +1,5 @@
-#ifndef OUR_DOUBLE_META
-#define OUR_DOUBLE_META
+#ifndef WARPSPEED_DOUBLE_META
+#define WARPSPEED_DOUBLE_META
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>

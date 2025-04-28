@@ -1,5 +1,5 @@
-#ifndef OUR_P2_HASH_META
-#define OUR_P2_HASH_META
+#ifndef WARPSPEED_P2_HASH_META
+#define WARPSPEED_P2_HASH_META
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>

@@ -1,5 +1,5 @@
-#ifndef GALLATIN_COOP_CHAINING_HASH
-#define GALLATIN_COOP_CHAINING_HASH
+#ifndef WARPSPEED_HASH
+#define WARPSPEED_HASH
 
 
 #include <cuda.h>

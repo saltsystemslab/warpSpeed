@@ -1,5 +1,5 @@
-#ifndef OUR_IHT_P2
-#define OUR_IHT_P2
+#ifndef WARPSPEED_IHT_P2
+#define WARPSPEED_IHT_P2
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>

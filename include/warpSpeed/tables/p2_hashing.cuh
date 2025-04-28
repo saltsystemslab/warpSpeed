@@ -1,5 +1,5 @@
-#ifndef LUDICROUS_P2_HASH
-#define LUDICROUS_P2_HASH
+#ifndef WARPSPEED_P2_HASH
+#define WARPSPEED_P2_HASH
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>

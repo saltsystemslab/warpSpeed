@@ -28,7 +28,7 @@
 
 #include <bght/p2bht.hpp>
 
-
+#
 
 #include <stdio.h>
 #include <iostream>
@@ -42,19 +42,19 @@
 namespace fs = std::filesystem;
 
 
-//
+//#include <warpSpeed/table_wrappers/p2_wrapper.cuh>
 //#include <warpSpeed/table_wrappers/dummy_ht.cuh>
 //#include <warpSpeed/table_wrappers/iht_wrapper.cuh>
-
+#include <warpSpeed/table_wrappers/warpcore_wrapper.cuh>
 #include <warpSpeed/tables/p2_hashing.cuh>
-
+#include <warpSpeed/tables/p2_hashing_internal.cuh>
 #include <warpSpeed/tables/double_hashing.cuh>
 #include <warpSpeed/tables/iht_p2.cuh>
 #include <warpSpeed/tables/chaining.cuh>
 #include <warpSpeed/tables/p2_hashing_metadata.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
 #include <warpSpeed/tables/double_hashing_metadata.cuh>
-#include <warpSpeed/tables/iht_metadata.cuh>
+#include <warpSpeed/tables/iht_p2_metadata_full.cuh>
 
 #include <slabhash/gpu_hash_table.cuh>
 
@@ -109,7 +109,7 @@ __host__ T * generate_data(uint64_t nitems){
 
       to_fill += togen;
 
-      //printf("Generated %lu/%lu\n", to_fill, nitems);
+      //printf("Generated %llu/%llu\n", to_fill, nitems);
 
    }
 
@@ -172,11 +172,11 @@ __global__ void verify_setup(uint32_t num_keys, uint32_t * first_round, uint32_t
 
    if (tid >= num_keys) return;
 
-   if (first_round[tid] == 0) printf("Fail on first for bucket %lu\n", tid);
+   if (first_round[tid] == 0) printf("Fail on first for bucket %llu\n", tid);
 
-   if (second_round[tid] == 0) printf("Fail on second for bucket %lu\n", tid);
+   if (second_round[tid] == 0) printf("Fail on second for bucket %llu\n", tid);
 
-   if (first_round[tid] == second_round[tid]) printf("Duplicates in %lu\n", tid);
+   if (first_round[tid] == second_round[tid]) printf("Duplicates in %llu\n", tid);
 
 }
 
@@ -337,7 +337,7 @@ __global__ void round_3_adversarial_workload(HT table, uint32_t n_buckets, uint3
    if (my_tile.thread_rank() == 0 && my_val != SEARCH_NOT_FOUND){
 
       atomicAdd((unsigned long long int *)&misses[1], 1ULL);
-      //printf("Key still exists, bucket %lu prev val %u query value: %u\n", tid, prev_val, my_val);
+      //printf("Key still exists, bucket %llu prev val %u query value: %u\n", tid, prev_val, my_val);
    }
 
 
@@ -626,7 +626,7 @@ __global__ void round_3_adversarial_workload_warpcore(HT * table, uint32_t n_buc
    if (my_tile.thread_rank() == 0 && second_query != Status::key_not_found()){
 
       atomicAdd((unsigned long long int *)&misses[1], 1ULL);
-      //printf("Key still exists, bucket %lu prev val %u query value: %u\n", tid, prev_val, my_val);
+      //printf("Key still exists, bucket %llu prev val %u query value: %u\n", tid, prev_val, my_val);
    }
 
 
@@ -1166,7 +1166,7 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
      
    } else if (table == "icebergMD"){
 
-      test_table<warpSpeed::tables::iht_metadata_generic, 4, 32>(table_capacity);
+      test_table<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(table_capacity);
 
    } else if (table == "cuckoo") {
        test_table<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity);
@@ -1254,7 +1254,7 @@ int main(int argc, char** argv) {
 
    // //test_table<warpSpeed::wrappers::warpcore_wrapper, 8, 8>(n_buckets);
 
-   // test_table<warpSpeed::tables::iht_metadata_generic, 4, 32>(n_buckets);
+   // test_table<warpSpeed::tables::iht_p2_metadata_full_generic, 4, 32>(n_buckets);
    
    // test_table<warpSpeed::tables::md_double_generic, 4, 32>(n_buckets);
 

@@ -1,5 +1,5 @@
-#ifndef OUR_IHT_METADATA
-#define OUR_IHT_METADATA
+#ifndef WARPSPEED_IHT_METADATA
+#define WARPSPEED_IHT_METADATA
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>

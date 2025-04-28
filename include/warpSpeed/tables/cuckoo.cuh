@@ -1,5 +1,5 @@
-#ifndef OUR_CUCKOO
-#define OUR_CUCKOO
+#ifndef WARPSPEED_CUCKOO
+#define WARPSPEED_CUCKOO
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>

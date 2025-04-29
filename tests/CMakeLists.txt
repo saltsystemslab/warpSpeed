@@ -28,5 +28,5 @@ ConfigureExecutableHT(sparse_tensor_test "${CMAKE_CURRENT_SOURCE_DIR}/src/sparse
 
 ConfigureExecutableHT(ycsb_test "${CMAKE_CURRENT_SOURCE_DIR}/src/ycsb_test.cu" "${HT_TESTS_BINARY_DIR}")
 
-ConfigureExecutableHT(sanity_test "${CMAKE_CURRENT_SOURCE_DIR}/src/sanity_test.cu" "${HT_TESTS_BINARY_DIR}")
+ConfigureExecutableHT(fill_test "${CMAKE_CURRENT_SOURCE_DIR}/src/fill_test.cu" "${HT_TESTS_BINARY_DIR}")
 

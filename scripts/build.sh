@@ -23,7 +23,6 @@ mkdir build
 cd build
 cmake .. -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-
 make adversarial_test &
 
 make lf_test &
@@ -50,6 +49,8 @@ make aging_probes &
 make cache_test &
 
 make sparse_tensor_test &
+
+make fill_test &
 
 wait
 

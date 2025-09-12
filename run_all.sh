@@ -24,7 +24,7 @@ cd build
 
 ../scripts/run_unstable.sh cuckoo
 
-../scripts/run_stable.sh chaining
+../scripts/run_stable.sh chaining | tee chaining_output.txt
 
 ../scripts/run_bght.sh
 

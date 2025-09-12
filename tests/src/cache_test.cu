@@ -311,10 +311,6 @@ int main(int argc, char** argv) {
 
    argparse::ArgumentParser program("cache_test");
 
-   // program.add_argument("square")
-   // .help("display the square of a given integer")
-   // .scan<'i', int>();
-
    program.add_argument("--table", "-t")
    .required()
    .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD chaining");
@@ -345,24 +341,6 @@ int main(int argc, char** argv) {
 
    double alpha = program.get<double>("--alpha");
 
-   // uint64_t host_items;
-
-   // uint64_t n_ops;
-
-
-   // if (argc < 2){
-   //    host_items = 1000000;
-   // } else {
-   //    host_items = std::stoull(argv[1]);
-   // }
-
-
-   // if (argc < 3){
-   //    n_ops = 1000;
-   // } else {
-   //    n_ops = std::stoull(argv[2]);
-   // }
-
    if(fs::create_directory("results")){
     //std::cout << "Created a directory\n";
    } else {
@@ -381,35 +359,6 @@ int main(int argc, char** argv) {
    }
 
    execute_test(table, n_queries, host_items, zipfian, alpha);
-
-   //uint64_t * access_data = generate_data<uint64_t>(n_ops);
-
-
-   //can't give up this space.
-   // init_global_allocator(16ULL*1024*1024*1024, 111);
-
-   
-   
-   // cache_test<warpSpeed::tables::chaining_generic, 4, 8>(host_items, n_ops, access_data);
-
-   // free_global_allocator();
-
-   // cache_test<warpSpeed::tables::md_double_generic, 4, 32>(host_items, n_ops, access_data);
-  
-
-
-   // // cache_test<warpSpeed::tables::p2_int_generic, 8, 32>(host_items, n_ops, access_data);
-   // //cache_test<warpSpeed::tables::double_generic, 8, 8>(host_items, n_ops, access_data);
-   // // cache_test<warpSpeed::tables::iht_p2_generic, 8, 32>(host_items, n_ops, access_data);
-   // cache_test<warpSpeed::tables::p2_ext_generic, 8, 32>(host_items, n_ops, access_data);
-   // cache_test<warpSpeed::tables::md_p2_generic, 4, 32>(host_items, n_ops, access_data);
-
-   // cache_test<warpSpeed::tables::iht_metadata_generic, 4, 32>(host_items, n_ops, access_data);
-   
-
-
-
-   //free_global_allocator();
 
 
    cudaDeviceReset();

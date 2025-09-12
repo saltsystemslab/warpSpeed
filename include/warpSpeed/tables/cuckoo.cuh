@@ -1404,6 +1404,8 @@ template <typename HT, uint tile_size>
 
          }
 
+         return false;
+
 
        }
 
@@ -1516,6 +1518,8 @@ template <typename HT, uint tile_size>
             __threadfence();
 
          }
+
+         return false;
 
 
       }

@@ -1634,7 +1634,7 @@ namespace tables {
       }
 
       __host__ void print_fill(){
-         printf("Not yet implemented\n");
+         return;
       }
 
    };

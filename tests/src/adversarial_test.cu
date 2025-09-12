@@ -491,14 +491,11 @@ __host__ void test_slabhash(uint64_t n_buckets){
       }
    }
 
-
    if (failed){
       printf("Table slabhash FAILED:\n- Query after delete: %lu\n- Delete after delete: %lu\n- Failed first query: %lu\n- Failed original delete: %lu\n", misses[1], misses[2], misses[3], misses[4]);
    } else {
       printf("Table slabhash PASSED\n");
    }
-
-
 
    //free
 
@@ -507,9 +504,6 @@ __host__ void test_slabhash(uint64_t n_buckets){
 
 
 }
-
-
-
 
 
 
@@ -607,8 +601,6 @@ __global__ void round_3_adversarial_workload_generic(HT * table, uint32_t n_buck
    if (table->find_with_reference(my_tile, my_key, my_val)){
 
 
-      //uint64_t key_bucket = table->get_lock_bucket(my_tile, my_key);
-      
       if (my_tile.thread_rank() == 0){
          atomicAdd((unsigned long long int *)&misses[1], 1ULL);
       }
@@ -618,8 +610,6 @@ __global__ void round_3_adversarial_workload_generic(HT * table, uint32_t n_buck
 
    if (table->remove(my_tile, my_key)){
 
-      //uint64_t key_bucket = table->get_lock_bucket(my_tile, my_key);
-      
       if (my_tile.thread_rank() == 0){
          atomicAdd((unsigned long long int *)&misses[2], 1ULL);
       }
@@ -699,12 +689,7 @@ __host__ void test_table(uint64_t n_buckets){
 
    }
 
-   //printf("Setup done\n");
-
-   
-
    cudaDeviceSynchronize();
-
 
    round_1_adversarial_workload_generic<ht_type, tile_size><<<(n_buckets*tile_size-1)/256+1,256>>>(table, n_buckets, first_round);
 
@@ -750,9 +735,6 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
 
       test_table<warpSpeed::tables::p2_ext_generic, 8, 32>(table_capacity);
 
-      //p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
-
-
    } else if (table == "p2MD"){
 
       test_table<warpSpeed::tables::md_p2_generic, 4, 32>(table_capacity);
@@ -797,22 +779,7 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
 
 int main(int argc, char** argv) {
 
-   // uint64_t n_buckets;
-
-
-
-   // if (argc < 2){
-   //    n_buckets = 1000000;
-   // } else {
-   //    n_buckets = std::stoull(argv[1]);
-   // }
-
-
    argparse::ArgumentParser program("adverarial_test");
-
-   // program.add_argument("square")
-   // .help("display the square of a given integer")
-   // .scan<'i', int>();
 
    program.add_argument("--table", "-t")
    .required()
@@ -835,30 +802,6 @@ int main(int argc, char** argv) {
 
    //start of tests.
    execute_test(table, table_capacity);
-
-   // test_table<warpSpeed::tables::md_p2_generic, 4, 32>(n_buckets);
-
-   // test_table<warpSpeed::tables::p2_ext_generic, 8, 32>(n_buckets);
-
-   // test_table<warpSpeed::tables::double_generic, 4, 8>(n_buckets);
-
-   // test_table<warpSpeed::tables::iht_p2_generic, 8, 32>(n_buckets);
-
-
-   // init_global_allocator(16ULL*1024*1024*1024, 111);
-
-   // test_table<warpSpeed::tables::chaining_generic, 4, 8>(n_buckets);
-
-   // free_global_allocator();
-
-   // test_table<warpSpeed::tables::cuckoo_generic, 4, 8>(n_buckets);
-
-   // //test_table<warpSpeed::wrappers::warpcore_wrapper, 8, 8>(n_buckets);
-
-   // test_table<warpSpeed::tables::iht_metadata_generic, 4, 32>(n_buckets);
-   
-   // test_table<warpSpeed::tables::md_double_generic, 4, 32>(n_buckets);
-
 
    cudaDeviceReset();
    return 0;

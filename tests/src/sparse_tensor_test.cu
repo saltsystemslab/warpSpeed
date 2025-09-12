@@ -157,13 +157,7 @@ int main(int argc, char** argv) {
    uint64_t n_indices_output = program.get<uint64_t>("--capacity");
 
    execute_test(table, input_file, n_indices_output);
-   //std::string input_file = "../dataset/nips.tns";
 
-   //uint64_t n_indices_output = 40000000ULL;
-   //can't give up this space.
-   // init_global_allocator(16ULL*1024*1024*1024, 111);
-
-  
    cudaDeviceReset();
    return 0;
 

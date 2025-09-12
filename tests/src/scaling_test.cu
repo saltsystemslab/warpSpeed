@@ -544,29 +544,6 @@ int main(int argc, char** argv) {
 
    std::cout << "Running scaling test with table " << table << " and " << table_capacity << " slots and " << n_rounds << " rounds with scaling factor " << scaling_factor << std::endl;
 
-   // int n_rounds;
-
-   // int scaling_factor;
-
-   // if (argc < 2){
-   //    table_capacity = 1000000;
-   // } else {
-   //    table_capacity = std::stoull(argv[1]);
-   // }
-
-   // if (argc < 3){
-   //    n_rounds = 3;
-   // } else {
-   //    n_rounds = std::stoull(argv[2]);
-   // }
-
-
-   // if (argc < 4){
-   //    scaling_factor = 10;
-   // } else {
-   //    scaling_factor = std::stoull(argv[3]);
-   // }
-
 
    if(fs::create_directory("results")){
     //std::cout << "Created a directory\n";
@@ -592,46 +569,6 @@ int main(int argc, char** argv) {
    #endif
 
    execute_test(table, table_capacity, n_rounds, scaling_factor);
-
-  //  uint64_t max_items = table_capacity * std::pow(scaling_factor, n_rounds-1);
-
-  //  auto access_pattern = generate_data<DATA_TYPE>(max_items);
-   
-  //  run_scaling<warpSpeed::tables::md_p2_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
-
-  //  run_scaling<warpSpeed::tables::p2_ext_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
-  //  run_scaling<warpSpeed::tables::double_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
-
-  //  run_scaling<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
-
-  //  run_scaling<warpSpeed::tables::iht_metadata_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
-
-
-  //  run_scaling<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
-
-
-  //  run_scaling<warpSpeed::tables::md_double_generic, 4, 32>(table_capacity, n_rounds, scaling_factor, access_pattern);
-
-   
-  //  init_global_allocator(30ULL*1024*1024*1024, 111);
-
-  //  run_scaling<warpSpeed::tables::chaining_generic, 4, 8>(table_capacity, n_rounds, scaling_factor, access_pattern);
-
-  //  free_global_allocator();
-
-  //  cudaDeviceSynchronize();
-   
-
-  // // lf_test<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, access_pattern);
-   
-  
-
-  //  //lf_test<warpSpeed::wrappers::warpcore_wrapper, 8, 8>(table_capacity, access_pattern);
-
-
-  //  cudaFreeHost(access_pattern);
-
-
 
    cudaDeviceReset();
    return 0;

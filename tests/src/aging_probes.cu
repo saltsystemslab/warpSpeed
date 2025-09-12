@@ -13,8 +13,6 @@
 
 #define MEASURE_INDEPENDENT 1
 
-// #define COUNT_PROBES 1
-
 #include <argparse/argparse.hpp>
 
 #include <gallatin/allocators/global_allocator.cuh>
@@ -895,95 +893,8 @@ int main(int argc, char** argv) {
 
    fs::create_directory("results");
    fs::create_directory("results/sawtooth_probe_" + std::to_string(n_rounds));
-   //  std::cout << "Created a directory\n";
-   // } else {
-   //  std::cerr << "Failed to create a directory\n";
-   // }
-
 
    execute_test(table, table_capacity, n_rounds, init_fill, replacement_rate);
-
-   // if (argc < 2){
-   //    table_capacity = 100000000;
-   // } else {
-   //    table_capacity = std::stoull(argv[1]);
-   // }
-
-   // if (argc < 3){
-   //    n_rounds = 1000;
-   // } else {
-   //    n_rounds = std::stoull(argv[2]);
-   // }
-
-
-   // if(fs::create_directory("results")){
-   //  std::cout << "Created a directory\n";
-   // } else {
-   //  std::cerr << "Failed to create a directory\n";
-   // }
-
-   // if(fs::create_directory("results/sawtooth_" + std::to_string(n_rounds))){
-   //  std::cout << "Created a directory\n";
-   // } else {
-   //  std::cerr << "Failed to create a directory\n";
-   // }
-
-
-   // #if !MEASURE_INDEPENDENT
-   //    if(fs::create_directory("results/sawtooth_combined_" + std::to_string(n_rounds))){
-   //     std::cout << "Created a directory\n";
-   //    } else {
-   //     std::cerr << "Failed to create a directory\n";
-   //    }
-   // #endif
-
-   // #if COUNT_PROBES
-
-   // if(fs::create_directory("results/sawtooth_probe_" + std::to_string(n_rounds))){
-   //  std::cout << "Created a directory\n";
-   // } else {
-   //  std::cerr << "Failed to create a directory\n";
-   // }
-
-   // #endif
-
-   // double init_fill = .85;
-   // double replacement_rate = .01;
-
-   // uint64_t replacement_items = replacement_rate*(n_rounds+1)*table_capacity;
-
-   // auto access_pattern = generate_data<DATA_TYPE>(table_capacity+replacement_items);
-
-   // auto negative_pattern = generate_data<DATA_TYPE>(table_capacity+replacement_items);
-
-
-   // sawtooth_test<warpSpeed::tables::md_p2_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-
-   // sawtooth_test<warpSpeed::tables::p2_ext_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-
-   // sawtooth_test<warpSpeed::tables::md_double_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-
-   // sawtooth_test<warpSpeed::tables::cuckoo_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-
-
-   // init_global_allocator(8ULL*1024*1024*1024, 111);
-
-   // sawtooth_test<warpSpeed::tables::chaining_generic, 4, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-
-   // free_global_allocator();
-   
-   // sawtooth_test<warpSpeed::tables::iht_p2_generic, 8, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-      
-   
-   // sawtooth_test<warpSpeed::tables::iht_metadata_generic, 4, 32>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds);
-   
-
-   // sawtooth_test<warpSpeed::wrappers::warpcore_wrapper, 8, 8>(table_capacity, init_fill, replacement_rate, access_pattern, negative_pattern, n_rounds); 
-
-   // cudaFreeHost(access_pattern);
-
-  
-
 
    cudaDeviceReset();
    return 0;

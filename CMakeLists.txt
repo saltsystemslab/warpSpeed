@@ -65,11 +65,10 @@ target_include_directories(warpSpeed INTERFACE
 
 add_subdirectory(warpcore)
 
-
 CPMAddPackage(
   NAME gallatin
   GITHUB_REPOSITORY saltsystemslab/gallatin
-  GIT_TAG origin/main
+  GIT_TAG origin/inlined_commands
 )
 
 CPMAddPackage (

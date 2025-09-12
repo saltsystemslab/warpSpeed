@@ -7,3 +7,5 @@
 ./tests/phased_test -t bght_cuckoo -c 100000000
 
 ./tests/phased_probes -t bght_cuckoo -c 100000000
+
+./tests/lf_test -t warpcore -c 100000000

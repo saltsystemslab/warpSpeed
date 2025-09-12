@@ -52,6 +52,7 @@ namespace fs = std::filesystem;
 #include <warpSpeed/tables/iht_metadata.cuh>
 #include <warpSpeed/tables/cuckoo.cuh>
 #include <warpSpeed/tables/double_hashing_metadata.cuh>
+#include <warpSpeed/wrappers/warpcore_wrapper.cuh>
 
 
 
@@ -1002,6 +1003,9 @@ __host__ void execute_test(std::string table, uint64_t table_capacity){
       lf_test<warpSpeed::tables::chaining_generic, 4, 8>(table_capacity, access_pattern);
 
       free_global_allocator();
+   } else if (table == "warpcore") {
+       lf_test<warpSpeed::tables::warpcore_wrapper_generic, 4, 4>(table_capacity, access_pattern);
+   
    } else {
       throw std::runtime_error("Unknown table");
    }
@@ -1018,9 +1022,13 @@ int main(int argc, char** argv) {
 
    argparse::ArgumentParser program("lf_test");
 
+   // program.add_argument("square")
+   // .help("display the square of a given integer")
+   // .scan<'i', int>();
+
    program.add_argument("--table", "-t")
    .required()
-   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo");
+   .help("Specify table type. Options [p2 p2MD double doubleMD iceberg icebergMD cuckoo chaining bght_p2 bght_cuckoo warpcore");
 
    program.add_argument("--capacity", "-c").required().scan<'u', uint64_t>().help("Number of slots in the table. Default is 100,000,000");
 
@@ -1040,6 +1048,19 @@ int main(int argc, char** argv) {
 
 
    std::cout << "Running lf test with table " << table << " and " << table_capacity << " slots." << std::endl;
+
+   // if (argc < 2){
+   //    table_capacity = 100000000;
+   // } else {
+   //    table_capacity = std::stoull(argv[1]);
+   // }
+
+   // if (argc < 3){
+   //    n_rounds = 1000;
+   // } else {
+   //    n_rounds = std::stoull(argv[2]);
+   // }
+
 
    if(fs::create_directory("results")){
     //std::cout << "Created a directory\n";
